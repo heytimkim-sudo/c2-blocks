@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -411,6 +412,37 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .disc-block.in-chain .face{box-shadow:inset 0 3px 10px rgba(255,255,255,.07),inset 0 -3px 8px rgba(0,0,0,.35),0 8px 0 rgba(0,0,0,.22),0 14px 28px rgba(0,0,0,.28),0 0 0 3px rgba(255,150,50,.5);}
 .disc-block.hit .face{filter:brightness(1.35);}
 .disc-block.muted{opacity:0.38;filter:saturate(0.3);}
+
+/* vertical connector strip */
+.connector.vert{
+  width:48px;
+  transform:translateX(-50%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+.connector.vert .con-outer{
+  width:36px;height:100%;
+  background:rgba(180,130,0,.22);
+  border-radius:4px;
+  border:2.5px solid rgba(200,160,0,.55);
+  position:relative;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+}
+.connector.vert .con-inner{
+  position:absolute;inset:4px;
+  background:linear-gradient(180deg,rgba(255,220,60,.25),rgba(255,215,0,.95),rgba(255,220,60,.25));
+  border-radius:5px;
+  box-shadow:0 0 16px rgba(255,200,30,.65),inset 0 1px 0 rgba(255,255,255,.4);
+}
+.connector.vert .con-inner::after{
+  content:'';position:absolute;inset:0;border-radius:5px;
+  background:repeating-linear-gradient(180deg,transparent,transparent 5px,rgba(255,255,255,.2) 5px,rgba(255,255,255,.2) 7px);
+}
+.connector.vert.playing .con-inner::before{
+  content:'';position:absolute;inset:0;border-radius:5px;
+  background:linear-gradient(180deg,transparent 0%,rgba(255,255,255,.65) 50%,transparent 100%);
+  animation:vflow .55s linear infinite;
+}
+@keyframes vflow{from{transform:translateY(-100%);}to{transform:translateY(100%);}}
 
 /* connector — warm amber for filter/joystick */
 .connector.disc-con .con-outer{background:rgba(255,140,40,.14);border-color:rgba(255,160,60,.5);}
@@ -1174,7 +1206,7 @@ function makeBlock(type,x,y){
     <div class="slab"></div><div class="floor-shadow"></div><div class="step-dot"></div>
     <div class="delete-btn" onmousedown="deleteBlock(event,${id})" ontouchstart="deleteBlock(event,${id})">✕</div>`;
   canvas.appendChild(el);
-  const block={id,type,el,x,y,rightNeighbor:null,leftNeighbor:null,isDpad:false};
+  const block={id,type,el,x,y,rightNeighbor:null,leftNeighbor:null,topNeighbor:null,bottomNeighbor:null,isDpad:false};
   blocks.push(block);
   el.addEventListener('mousedown',onBlockMousedown);
   el.addEventListener('touchstart',onBlockTouchstart,{passive:false});
@@ -1207,7 +1239,7 @@ function makeDpadBlock(x,y){
     <div class="slab"></div><div class="floor-shadow"></div>
     <div class="delete-btn" onmousedown="deleteBlock(event,${id})" ontouchstart="deleteBlock(event,${id})">✕</div>`;
   canvas.appendChild(el);
-  const block={id,type:'dpad',el,x,y,rightNeighbor:null,leftNeighbor:null,isDpad:true};
+  const block={id,type:'dpad',el,x,y,rightNeighbor:null,leftNeighbor:null,topNeighbor:null,bottomNeighbor:null,isDpad:true};
   blocks.push(block);
   el.addEventListener('mousedown',onDpadMousedown);
   el.addEventListener('touchstart',onDpadTouchstart,{passive:false});
@@ -1244,7 +1276,7 @@ function makeDiscBlock(x,y){
     <div class="step-dot"></div>
     <div class="delete-btn" onmousedown="deleteBlock(event,${id})" ontouchstart="deleteBlock(event,${id})">✕</div>`;
   canvas.appendChild(el);
-  const block={id,type:'disc',el,x,y,rightNeighbor:null,leftNeighbor:null,isDpad:false,isDisc:true};
+  const block={id,type:'disc',el,x,y,rightNeighbor:null,leftNeighbor:null,topNeighbor:null,bottomNeighbor:null,isDpad:false,isDisc:true};
   blocks.push(block);
   el.addEventListener('mousedown',onBlockMousedown);
   el.addEventListener('touchstart',onBlockTouchstart,{passive:false});
@@ -1402,6 +1434,8 @@ function deleteBlock(e,id){
   // detach neighbors
   if(block.leftNeighbor){const l=blockById(block.leftNeighbor);if(l)l.rightNeighbor=null;}
   if(block.rightNeighbor){const r=blockById(block.rightNeighbor);if(r)r.leftNeighbor=null;}
+  if(block.topNeighbor){const t=blockById(block.topNeighbor);if(t)t.bottomNeighbor=null;}
+  if(block.bottomNeighbor){const bt=blockById(block.bottomNeighbor);if(bt)bt.topNeighbor=null;}
 
   // remove from DOM and array
   block.el.style.transition='opacity .2s,transform .2s';
@@ -1425,31 +1459,52 @@ function dpadPress(e,id,dir){
   if(!block||!isDpadConnected(block)) return;
   const btn=document.getElementById(`dp-${dir}-${id}`);
   if(btn){btn.classList.add('pressed');setTimeout(()=>btn.classList.remove('pressed'),150);}
-  if(dir==='up')cycleInstrument(1);
-  if(dir==='down')cycleInstrument(-1);
+  if(dir==='up')cycleInstrument(1,block);
+  if(dir==='down')cycleInstrument(-1,block);
 }
 function isDpadConnected(dp){
-  // Walk the full chain — if it contains any instrument block, dpad is active
-  const chainBlocks=getChainOf(dp);
+  // Walk the horizontal chain only — if it contains any instrument block, dpad is active
+  const chainBlocks=getHorizontalChainOf(dp);
   return chainBlocks.some(b=>!b.isDpad&&!b.isDisc);
 }
-function cycleInstrument(dir){
-  const idx=INSTRUMENTS.indexOf(currentInstrument);
-  currentInstrument=INSTRUMENTS[(idx+dir+INSTRUMENTS.length)%INSTRUMENTS.length];
-  applyInstrumentToAll();
-  showToast(`${INSTRUMENT_ICONS[currentInstrument]}  ${currentInstrument.toUpperCase()}`);
-  flashScreen(currentInstrument);
+
+// Get only the horizontal chain (no vertical traversal) for a given block
+function getHorizontalChainOf(block){
+  let cur=block;
+  while(cur.leftNeighbor&&blockById(cur.leftNeighbor)) cur=blockById(cur.leftNeighbor);
+  const chain=[];
+  while(cur){ chain.push(cur); cur=cur.rightNeighbor?blockById(cur.rightNeighbor):null; }
+  return chain;
 }
-function applyInstrumentToAll(){
-  const inst=currentInstrument,isDrums=inst==='drums';
+
+function cycleInstrument(dir,dpadBlock){
+  // Each dpad tracks its own instrument — stored on the block itself
+  if(!dpadBlock.instrument) dpadBlock.instrument='drums';
+  const idx=INSTRUMENTS.indexOf(dpadBlock.instrument);
+  dpadBlock.instrument=INSTRUMENTS[(idx+dir+INSTRUMENTS.length)%INSTRUMENTS.length];
+  applyInstrumentToChain(dpadBlock);
+  showToast(`${INSTRUMENT_ICONS[dpadBlock.instrument]}  ${dpadBlock.instrument.toUpperCase()}`);
+  flashScreen(dpadBlock.instrument);
+}
+
+function applyInstrumentToChain(dpadBlock){
+  const inst=dpadBlock.instrument||'drums';
+  const isDrums=inst==='drums';
   const drumColors={kick:['#c0392b','#922b21','#7b241c','#6e1f19'],snare:['#e67e22','#ca6f1e','#a04000','#873600'],hihat:['#1abc9c','#148f77','#0e6655','#0b5345'],bass:['#2980b9','#1a6fa8','#154360','#123756']};
-  blocks.forEach(b=>{
-    if(b.isDpad||b.isDisc) return; // skip non-instrument blocks
+
+  // Get only the horizontal row this D-pad is in — do NOT include vertical stacks
+  const hChain=getHorizontalChainOf(dpadBlock);
+  // Collect just the instrument blocks in the horizontal row (not dpad, not disc)
+  const rowBlocks=hChain.filter(b=>!b.isDpad&&!b.isDisc);
+
+  rowBlocks.forEach(b=>{
+    // Store which instrument this block is currently on
+    b.currentInstrument=inst;
     const face=b.el.querySelector('.face');
     const bn=document.getElementById('bn-'+b.id);
     const mb=document.getElementById('mb-'+b.id);
     const slab=b.el.querySelector('.slab');
-    if(!face||!bn) return; // guard against missing elements
+    if(!face||!bn) return;
     if(isDrums){
       const dc=drumColors[b.type];
       if(dc){
@@ -1471,22 +1526,41 @@ function applyInstrumentToAll(){
     face.style.transition='background .4s';
     setTimeout(()=>{if(face) face.style.transition='';},500);
   });
-  // Update dpad labels
-  blocks.forEach(b=>{
-    if(!b.isDpad) return;
-    const lbl=document.getElementById('dpad-label-'+b.id);if(!lbl) return;
-    lbl.textContent=isDpadConnected(b)?`${INSTRUMENT_ICONS[inst]} ${inst.toUpperCase()}`:'CONNECT TO ACTIVATE';
+
+  // Update this dpad's label
+  const lbl=document.getElementById('dpad-label-'+dpadBlock.id);
+  if(lbl) lbl.textContent=isDpadConnected(dpadBlock)
+    ?`${INSTRUMENT_ICONS[inst]} ${inst.toUpperCase()}`
+    :'CONNECT TO ACTIVATE';
+}
+
+function applyInstrumentToAll(){
+  // Called on global resets — each dpad re-applies its own instrument to its chain
+  const dpads=blocks.filter(b=>b.isDpad&&isDpadConnected(b));
+  dpads.forEach(dp=>applyInstrumentToChain(dp));
+  // Update disconnected dpad labels
+  blocks.filter(b=>b.isDpad&&!isDpadConnected(b)).forEach(dp=>{
+    const lbl=document.getElementById('dpad-label-'+dp.id);
+    if(lbl) lbl.textContent='CONNECT TO ACTIVATE';
   });
 }
 function checkDpadConnections(){
   const dpads=blocks.filter(b=>b.isDpad);
-  const anyConnected=dpads.some(d=>isDpadConnected(d));
-  if(!anyConnected&&currentInstrument!=='drums'){currentInstrument='drums';applyInstrumentToAll();showToast('🥁  DRUMS');}
   dpads.forEach(d=>{
     const lbl=document.getElementById('dpad-label-'+d.id);if(!lbl) return;
     const connected=isDpadConnected(d);
     d.el.classList.toggle('connected',connected);
-    lbl.textContent=connected?`${INSTRUMENT_ICONS[currentInstrument]} ${currentInstrument.toUpperCase()}`:'CONNECT TO ACTIVATE';
+    if(!connected){
+      // Revert blocks in this D-pad's chain back to drums when disconnected
+      if(d.instrument&&d.instrument!=='drums'){
+        d.instrument='drums';
+        // Re-apply drums to whatever chain this dpad was last in (now detached, affects nothing)
+      }
+      lbl.textContent='CONNECT TO ACTIVATE';
+    } else {
+      const inst=d.instrument||'drums';
+      lbl.textContent=`${INSTRUMENT_ICONS[inst]} ${inst.toUpperCase()}`;
+    }
   });
 }
 
@@ -1499,11 +1573,18 @@ function updatePlaybackMuting(){
     blocks.forEach(b=>{b.el.classList.remove('muted','solo-active');});
     return;
   }
-  // Blocks in connected chains (2+ playable)
+  // Blocks in connected chains (2+ playable OR any vertical connection) + their stack members
   const connectedIds=new Set();
   chains.forEach(ch=>{
     const playable=ch.filter(id=>{const b=blockById(id);return b&&!b.isDpad&&!b.isDisc;});
-    if(playable.length>1) playable.forEach(id=>connectedIds.add(id));
+    if(playable.length===0) return;
+    // Qualify if 2+ horizontal OR any block has a vertical neighbor
+    const hasVertical=playable.some(id=>{const b=blockById(id);return b&&(b.topNeighbor||b.bottomNeighbor);});
+    if(playable.length<2&&!hasVertical) return;
+    playable.forEach(id=>{
+      connectedIds.add(id);
+      const b=blockById(id);if(b) getVerticalStack(b).forEach(sid=>connectedIds.add(sid));
+    });
   });
   // Blocks mounted on any mat are always active during playback
   const matIds=new Set();
@@ -1650,12 +1731,20 @@ function onDpadTouchstart(e){
 }
 
 function getChainOf(block){
-  // Walk to leftmost, then collect all ids rightward
+  // Walk to topmost in any vertical stack first, then to leftmost in horizontal chain
   let cur=block;
+  while(cur.topNeighbor&&blockById(cur.topNeighbor)) cur=blockById(cur.topNeighbor);
   while(cur.leftNeighbor&&blockById(cur.leftNeighbor)) cur=blockById(cur.leftNeighbor);
-  const chain=[];
-  while(cur){ chain.push(cur.id); cur=cur.rightNeighbor?blockById(cur.rightNeighbor):null; }
-  return chain.map(id=>blockById(id)).filter(Boolean);
+  // Now collect all blocks: for each horizontal position, collect the full vertical stack
+  const allIds=[];
+  let hCur=cur;
+  while(hCur){
+    // Add vertical stack at this position
+    const stack=getVerticalStack(hCur);
+    stack.forEach(id=>{if(!allIds.includes(id))allIds.push(id);});
+    hCur=hCur.rightNeighbor?blockById(hCur.rightNeighbor):null;
+  }
+  return allIds.map(id=>blockById(id)).filter(Boolean);
 }
 
 function beginDrag(el,cx,cy){
@@ -1773,7 +1862,10 @@ function setBlockPos(b,x,y){b.x=x;b.y=y;b.el.style.left=x+'px';b.el.style.top=y+
 function detachBlock(block){
   if(block.leftNeighbor){const l=blockById(block.leftNeighbor);if(l)l.rightNeighbor=null;}
   if(block.rightNeighbor){const r=blockById(block.rightNeighbor);if(r)r.leftNeighbor=null;}
+  if(block.topNeighbor){const t=blockById(block.topNeighbor);if(t)t.bottomNeighbor=null;}
+  if(block.bottomNeighbor){const b=blockById(block.bottomNeighbor);if(b)b.topNeighbor=null;}
   block.leftNeighbor=null;block.rightNeighbor=null;
+  block.topNeighbor=null;block.bottomNeighbor=null;
   if(block.isDpad)setTimeout(checkDpadConnections,50);
   if(block.isDisc)setTimeout(checkDiscConnections,50);
   rebuildChains();renderConnectors();
@@ -1811,11 +1903,26 @@ function trySnap(dragged){
     if(other.rightNeighbor){
       const rightBlock=blockById(other.rightNeighbor);
       if(rightBlock&&canSnapTogether(dragged,other)&&canSnapTogether(dragged,rightBlock)){
-        // Target position: right of other
         const tx=other.x+getW(other)+GAP, ty=other.y+(getH(other)-getH(dragged))/2;
         const dist=Math.hypot(dragged.x-tx,dragged.y-ty);
         if(dist<bestDist){bestDist=dist;best=other;bestSide='insert';bestInsertRight=rightBlock;}
       }
+    }
+
+    // ── Vertical snap: below other (other has no bottom neighbor) ──
+    if(!other.bottomNeighbor&&!dragged.topNeighbor&&!dragged.isDpad&&!other.isDpad){
+      const tx=other.x+(getW(other)-getW(dragged))/2;
+      const ty=other.y+getH(other)+GAP;
+      const dist=Math.hypot(dragged.x-tx,dragged.y-ty);
+      if(dist<bestDist){bestDist=dist;best=other;bestSide='below';bestInsertRight=null;}
+    }
+
+    // ── Vertical snap: above other (other has no top neighbor) ──
+    if(!other.topNeighbor&&!dragged.bottomNeighbor&&!dragged.isDpad&&!other.isDpad){
+      const tx=other.x+(getW(other)-getW(dragged))/2;
+      const ty=other.y-getH(dragged)-GAP;
+      const dist=Math.hypot(dragged.x-tx,dragged.y-ty);
+      if(dist<bestDist){bestDist=dist;best=other;bestSide='above';bestInsertRight=null;}
     }
   });
 
@@ -1838,8 +1945,18 @@ function trySnap(dragged){
       snapFeedback(dragged,bestInsertRight);
       rebuildChains();renderConnectors();checkDpadConnections();checkDiscConnections();updatePlaybackMuting();
     });
+  } else if(bestSide==='below'||bestSide==='above'){
+    // ── VERTICAL SNAP ──
+    const tx=best.x+(getW(best)-getW(dragged))/2;
+    const ty=bestSide==='below'?best.y+getH(best)+GAP:best.y-getH(dragged)-GAP;
+    animateTo(dragged,tx,ty,()=>{
+      if(bestSide==='below'){best.bottomNeighbor=dragged.id;dragged.topNeighbor=best.id;}
+      else{best.topNeighbor=dragged.id;dragged.bottomNeighbor=best.id;}
+      snapFeedback(dragged,best);
+      rebuildChains();renderConnectors();checkDpadConnections();checkDiscConnections();updatePlaybackMuting();
+    });
   } else {
-    // ── END-SNAP: attach to open end ──
+    // ── END-SNAP: attach to open horizontal end ──
     const tx=bestSide==='right'?best.x+getW(best)+GAP:best.x-dw-GAP;
     const ty=best.y+(getH(best)-getH(dragged))/2;
     animateTo(dragged,tx,ty,()=>{
@@ -1900,6 +2017,17 @@ function highlightSnapTargets(){
         if(Math.hypot(dragging.x-tx,dragging.y-other.y)<SNAP_DIST) close=true;
       }
     }
+    // Vertical snap highlight
+    if(!close&&!dragging.isDpad&&!other.isDpad){
+      if(!other.bottomNeighbor&&!dragging.topNeighbor){
+        const tx=other.x+(getW(other)-getW(dragging))/2, ty=other.y+getH(other)+GAP;
+        if(Math.hypot(dragging.x-tx,dragging.y-ty)<SNAP_DIST) close=true;
+      }
+      if(!other.topNeighbor&&!dragging.bottomNeighbor){
+        const tx=other.x+(getW(other)-getW(dragging))/2, ty=other.y-getH(dragging)-GAP;
+        if(Math.hypot(dragging.x-tx,dragging.y-ty)<SNAP_DIST) close=true;
+      }
+    }
     other.el.classList.toggle('snap-target',close);
   });
 }
@@ -1930,18 +2058,34 @@ function highlightInsertConnector(){
 function renderConnectors(){
   document.querySelectorAll('.connector').forEach(c=>c.remove());
   blocks.forEach(b=>{
-    if(!b.rightNeighbor) return;
-    const r=blockById(b.rightNeighbor);if(!r) return;
-    const isDpadLink=b.isDpad||r.isDpad;
-    const isDiscLink=b.isDisc||r.isDisc;
-    const con=document.createElement('div');
-    con.className='connector'+(isDiscLink?' disc-con':isDpadLink?' dpad-con':'')+(isPlaying?' playing':'');
-    const left=b.x+getW(b)-1;
-    const width=Math.max(GAP,r.x-(b.x+getW(b))+2);
-    const ch=getH(b);
-    con.style.cssText=`left:${left}px;top:${b.y+(ch-48)/2}px;width:${width}px;`;
-    con.innerHTML='<div class="con-outer"><div class="con-inner"></div></div>';
-    canvas.appendChild(con);
+    // Horizontal connectors
+    if(b.rightNeighbor){
+      const r=blockById(b.rightNeighbor);if(r){
+        const isDpadLink=b.isDpad||r.isDpad;
+        const isDiscLink=b.isDisc||r.isDisc;
+        const con=document.createElement('div');
+        con.className='connector'+(isDiscLink?' disc-con':isDpadLink?' dpad-con':'')+(isPlaying?' playing':'');
+        const left=b.x+getW(b)-1;
+        const width=Math.max(GAP,r.x-(b.x+getW(b))+2);
+        const ch=getH(b);
+        con.style.cssText=`left:${left}px;top:${b.y+(ch-48)/2}px;width:${width}px;`;
+        con.innerHTML='<div class="con-outer"><div class="con-inner"></div></div>';
+        canvas.appendChild(con);
+      }
+    }
+    // Vertical connectors
+    if(b.bottomNeighbor){
+      const bt=blockById(b.bottomNeighbor);if(bt){
+        const con=document.createElement('div');
+        con.className='connector vert'+(isPlaying?' playing':'');
+        const midX=b.x+getW(b)/2;
+        const top=b.y+getH(b)-1;
+        const height=Math.max(GAP,bt.y-(b.y+getH(b))+2);
+        con.style.cssText=`left:${midX}px;top:${top}px;width:48px;height:${height}px;position:absolute;`;
+        con.innerHTML='<div class="con-outer"><div class="con-inner"></div></div>';
+        canvas.appendChild(con);
+      }
+    }
   });
 }
 
@@ -1949,19 +2093,70 @@ function renderConnectors(){
    CHAINS
 ══════════════════════════════ */
 let chains=[];
+// For each chain, stacksPerChain[ci][stepIdx] = array of block IDs to play simultaneously
+let stacksPerChain=[];
+
+function getVerticalStack(block){
+  if(!block) return [];
+  // Collect all blocks in this vertical column (walk up then down from this block)
+  let top=block;
+  while(top.topNeighbor&&blockById(top.topNeighbor)) top=blockById(top.topNeighbor);
+  const stack=[];
+  let cur=top;
+  while(cur){stack.push(cur.id);cur=cur.bottomNeighbor?blockById(cur.bottomNeighbor):null;}
+  return stack;
+}
+
 function rebuildChains(){
-  chains=[];const visited=new Set();
+  chains=[];stacksPerChain=[];const visited=new Set();
+
+  // First pass: collect all block IDs that appear in ANY vertical stack
+  // where another member of that stack has a horizontal neighbor.
+  // Those blocks belong to a horizontal chain via their stack — don't give them their own chain.
+  const ownedByHChain=new Set();
+  blocks.forEach(b=>{
+    if(b.leftNeighbor||b.rightNeighbor){
+      // This block is in a horizontal chain — mark its entire vertical stack as owned
+      getVerticalStack(b).forEach(id=>ownedByHChain.add(id));
+    }
+  });
+
+  // Second pass: build horizontal chains
   blocks.forEach(b=>{
     if(visited.has(b.id)) return;
+    // Skip if owned by a horizontal chain via a vertical stack
+    if(ownedByHChain.has(b.id)&&!b.leftNeighbor&&!b.rightNeighbor) return;
     let cur=b;
-    while(cur.leftNeighbor&&blockById(cur.leftNeighbor)&&!visited.has(cur.leftNeighbor))cur=blockById(cur.leftNeighbor);
+    // Walk left to find chain root
+    while(cur.leftNeighbor&&blockById(cur.leftNeighbor)&&!visited.has(cur.leftNeighbor))
+      cur=blockById(cur.leftNeighbor);
     const chain=[];
-    while(cur){if(visited.has(cur.id))break;visited.add(cur.id);chain.push(cur.id);cur=cur.rightNeighbor?blockById(cur.rightNeighbor):null;}
-    if(chain.length>0)chains.push(chain);
+    while(cur){
+      if(visited.has(cur.id)) break;
+      visited.add(cur.id);
+      chain.push(cur.id);
+      // Mark entire vertical stack as visited so they don't spawn their own chains
+      getVerticalStack(cur).forEach(id=>{visited.add(id);});
+      cur=cur.rightNeighbor?blockById(cur.rightNeighbor):null;
+    }
+    if(chain.length>0){
+      chains.push(chain);
+      // For each horizontal position, record the full vertical stack (top→bottom)
+      const stacks=chain.map(id=>{
+        const b=blockById(id);
+        if(!b) return [];
+        return getVerticalStack(b).filter(sid=>{
+          const sb=blockById(sid);return sb&&!sb.isDpad&&!sb.isDisc;
+        });
+      });
+      stacksPerChain.push(stacks);
+    }
   });
+
   blocks.forEach(b=>{
-    const inChain=chains.some(ch=>ch.length>1&&ch.includes(b.id));
-    b.el.classList.toggle('in-chain',inChain&&!b.isDpad); // disc gets in-chain glow too
+    const inChain=chains.some(ch=>ch.length>1&&ch.includes(b.id))||
+                  blocks.some(ob=>ob.bottomNeighbor===b.id||ob.topNeighbor===b.id);
+    b.el.classList.toggle('in-chain',inChain&&!b.isDpad);
   });
   checkDiscConnections();
   if(isPlaying)restartLoop();
@@ -1975,7 +2170,9 @@ const instEmojis={drums:'🥁',piano:'🎹',strings:'🎻',horns:'🎺',guitar:'
 
 function triggerBlock(block,fromLoop){
   if(block.isDpad||block.isDisc) return;
-  const snd=INSTRUMENT_SOUNDS[currentInstrument][block.type];
+  // Use this block's own instrument (set by its row's D-pad), fallback to drums
+  const inst=block.currentInstrument||'drums';
+  const snd=INSTRUMENT_SOUNDS[inst]?.[block.type]||INSTRUMENT_SOUNDS.drums[block.type];
   if(snd) snd();
   block.el.classList.remove('hit');void block.el.offsetWidth;block.el.classList.add('hit');
   setTimeout(()=>block.el.classList.remove('hit'),180);
@@ -1985,7 +2182,7 @@ function triggerBlock(block,fromLoop){
   if(!fromLoop){
     const rect=block.el.getBoundingClientRect();
     const pop=document.createElement('div');pop.className='note-pop';
-    pop.textContent=currentInstrument==='drums'?emojis[block.type]:instEmojis[currentInstrument];
+    pop.textContent=inst==='drums'?emojis[block.type]:instEmojis[inst];
     pop.style.left=(rect.left+rect.width/2-10+(Math.random()-.5)*20)+'px';
     pop.style.top=(rect.top+10)+'px';
     document.body.appendChild(pop);
@@ -2037,17 +2234,42 @@ function tick(){
 
   // ── Play connected chains ──
   chains.forEach((chain,ci)=>{
+    // The horizontal sequence (no dpad/disc)
     const playChain=chain.filter(id=>{const b=blockById(id);return b&&!b.isDpad&&!b.isDisc;});
-    if(playChain.length<2) return;
-    if(chainSteps[ci]===undefined)chainSteps[ci]=0;
+    if(playChain.length===0) return;
+
+    // Qualify: 2+ horizontal blocks OR a vertical neighbor exists on any block
+    const hasVertical=playChain.some(id=>{const b=blockById(id);return b&&(b.topNeighbor||b.bottomNeighbor);});
+    if(playChain.length<2&&!hasVertical) return;
+
+    if(chainSteps[ci]===undefined) chainSteps[ci]=0;
     const stepIdx=chainSteps[ci]%playChain.length;
-    const bid=playChain[stepIdx];
-    const block=blockById(bid);
-    if(block){
-      triggerBlock(block,true);
-      playChain.forEach(id=>{const bl=blockById(id);if(bl)bl.el.querySelector('.step-dot').classList.remove('active');});
-      block.el.querySelector('.step-dot').classList.add('active');
-    }
+    const currentId=playChain[stepIdx];
+
+    // Clear all step dots across the whole chain (horizontal + all their stacks)
+    playChain.forEach(id=>{
+      const bl=blockById(id);if(!bl) return;
+      bl.el.querySelector('.step-dot').classList.remove('active');
+      getVerticalStack(bl).forEach(sid=>{
+        const sb=blockById(sid);
+        if(sb) sb.el.querySelector('.step-dot').classList.remove('active');
+      });
+    });
+
+    // Fire the current horizontal block + any blocks stacked vertically on it
+    const stacks=stacksPerChain[ci]||[];
+    // Find which stack corresponds to this horizontal step
+    const hIdx=chain.indexOf(currentId);
+    const stepStack=(stacks[hIdx]&&stacks[hIdx].length>0)?stacks[hIdx]:[currentId];
+
+    stepStack.forEach(bid=>{
+      const block=blockById(bid);
+      if(block){
+        triggerBlock(block,true);
+        block.el.querySelector('.step-dot').classList.add('active');
+      }
+    });
+
     chainSteps[ci]=(stepIdx+1)%playChain.length;
   });
 
@@ -2365,8 +2587,8 @@ const keyMap={a:'kick',s:'snare',d:'hihat',f:'bass'};
 const held=new Set();
 document.addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
-  if(k==='arrowup'){e.preventDefault();const dp=blocks.filter(b=>b.isDpad&&isDpadConnected(b));if(dp.length)cycleInstrument(1);return;}
-  if(k==='arrowdown'){e.preventDefault();const dp=blocks.filter(b=>b.isDpad&&isDpadConnected(b));if(dp.length)cycleInstrument(-1);return;}
+  if(k==='arrowup'){e.preventDefault();const dp=blocks.filter(b=>b.isDpad&&isDpadConnected(b));if(dp.length)cycleInstrument(1,dp[dp.length-1]);return;}
+  if(k==='arrowdown'){e.preventDefault();const dp=blocks.filter(b=>b.isDpad&&isDpadConnected(b));if(dp.length)cycleInstrument(-1,dp[dp.length-1]);return;}
   if(!keyMap[k]||held.has(k)) return;
   held.add(k);
   const match=blocks.filter(b=>b.type===keyMap[k]);
