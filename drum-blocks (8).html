@@ -1,0 +1,2460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Drum Blocks</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;800&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{
+  width:100vw;height:100vh;overflow:hidden;
+  overscroll-behavior:none;
+  -webkit-overflow-scrolling:touch;
+  background-color:#f0e4d0;
+  background-image:
+    repeating-linear-gradient(90deg,transparent,transparent 60px,rgba(160,120,70,.06) 60px,rgba(160,120,70,.06) 61px),
+    repeating-linear-gradient(0deg,transparent,transparent 60px,rgba(160,120,70,.06) 60px,rgba(160,120,70,.06) 61px);
+  font-family:'Nunito',sans-serif;user-select:none;cursor:default;
+}
+body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(140,95,50,.16) 100%);pointer-events:none;z-index:0;}
+
+/* ── TRAY ── */
+#tray{
+  position:fixed;top:0;left:0;right:0;height:68px;
+  background:rgba(235,220,198,.97);border-bottom:2px solid rgba(160,120,70,.2);
+  display:flex;align-items:center;gap:12px;
+  padding:0 max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-left));
+  padding-top:env(safe-area-inset-top);
+  z-index:200;backdrop-filter:blur(6px);
+  overflow-x:auto;overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+#tray::-webkit-scrollbar{display:none;}
+#tray-label{font-family:'Fredoka One',cursive;font-size:15px;color:#8b5e3c;letter-spacing:2px;opacity:.7;}
+.tray-block{
+  width:52px;height:52px;border-radius:10px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:2px;cursor:grab;flex-shrink:0;
+  box-shadow:0 4px 0 rgba(0,0,0,.18),0 6px 14px rgba(0,0,0,.12);
+  transition:transform .12s,box-shadow .12s;position:relative;overflow:hidden;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:none;
+}
+@media(max-width:768px){
+  .tray-block{width:46px;height:46px;}
+  .tray-block .tl{font-size:17px;}
+  #tray-label{display:none;}
+  .tray-sep{display:none;}
+  #bpm-knob input[type=range]{width:60px;}
+}
+.tray-block:hover{transform:translateY(-3px);box-shadow:0 7px 0 rgba(0,0,0,.18),0 10px 20px rgba(0,0,0,.15);}
+.tray-block .tl{font-family:'Fredoka One',cursive;font-size:20px;color:rgba(255,255,255,.92);text-shadow:0 2px 4px rgba(0,0,0,.25);line-height:1;}
+.tray-block .ts{font-size:7px;font-weight:800;letter-spacing:2px;color:rgba(255,255,255,.65);}
+.tray-block::before{content:'';position:absolute;inset:0;border-radius:10px;background-image:repeating-linear-gradient(10deg,transparent,transparent 7px,rgba(255,255,255,.07) 7px,rgba(255,255,255,.07) 8px);pointer-events:none;}
+.tc-kick {background:linear-gradient(145deg,#c0392b,#7b241c);}
+.tc-snare{background:linear-gradient(145deg,#e67e22,#a04000);}
+.tc-hihat{background:linear-gradient(145deg,#1abc9c,#0e6655);}
+.tc-bass {background:linear-gradient(145deg,#2980b9,#154360);}
+.tc-dpad {background:linear-gradient(145deg,#6c3483,#3b1a5e);}
+.tray-sep{width:1px;height:36px;background:rgba(160,120,70,.2);flex-shrink:0;}
+#tray-right{margin-left:auto;display:flex;align-items:center;gap:14px;}
+#bpm-knob{display:flex;align-items:center;gap:8px;font-family:'Fredoka One',cursive;font-size:13px;color:#8b5e3c;letter-spacing:1px;}
+#bpm-knob input[type=range]{-webkit-appearance:none;width:80px;height:4px;background:rgba(139,94,60,.25);border-radius:4px;outline:none;cursor:pointer;}
+#bpm-knob input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#c0783a;box-shadow:0 2px 6px rgba(0,0,0,.25);}
+#play-btn{font-family:'Fredoka One',cursive;font-size:14px;letter-spacing:2px;background:#c0783a;color:white;border:none;border-radius:10px;padding:8px 18px;cursor:pointer;box-shadow:0 3px 0 #8a4e22,0 5px 12px rgba(0,0,0,.18);transition:all .1s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+#play-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #8a4e22;}
+#play-btn.playing{background:#2ecc71;box-shadow:0 3px 0 #1a8a49;}
+
+/* ── CANVAS ── */
+#canvas{position:fixed;top:68px;left:0;right:0;bottom:0;z-index:10;overflow:hidden;cursor:default;-webkit-overflow-scrolling:touch;}
+#canvas.panning{cursor:grabbing;}
+#world{
+  position:absolute;
+  top:0;left:0;
+  width:3000px;height:3000px;
+  transform-origin:0 0;
+  transform:translate(0px,0px) scale(1);
+  -webkit-transform:translate(0px,0px) scale(1);
+  will-change:transform;
+  -webkit-backface-visibility:hidden;
+  backface-visibility:hidden;
+}
+/* Zoom controls */
+#zoom-controls{
+  position:fixed;bottom:22px;right:18px;
+  display:flex;flex-direction:column;gap:4px;
+  z-index:300;
+}
+.zoom-btn{
+  width:36px;height:36px;border-radius:8px;
+  background:rgba(235,220,198,.95);
+  border:1px solid rgba(160,120,70,.25);
+  font-family:'Fredoka One',cursive;font-size:18px;
+  color:#8b5e3c;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 8px rgba(0,0,0,.12);
+  transition:background .1s,transform .1s;
+  user-select:none;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+}
+.zoom-btn:hover{background:rgba(220,200,170,.98);}
+.zoom-btn:active{transform:scale(.93);}
+#zoom-level{
+  font-family:'Fredoka One',cursive;font-size:10px;letter-spacing:1px;
+  color:#b89070;text-align:center;
+  background:rgba(235,220,198,.85);
+  border-radius:6px;padding:3px 0;
+  border:1px solid rgba(160,120,70,.15);
+  user-select:none;
+}
+
+/* ── DRUM BLOCKS ── */
+.drum-block{
+  position:absolute;width:120px;height:120px;border-radius:14px;
+  cursor:grab;touch-action:none;z-index:10;will-change:transform;
+}
+.drum-block:active{cursor:grabbing;}
+.drum-block.dragging{z-index:500;}
+.drum-block .face{
+  position:absolute;inset:0;border-radius:14px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;overflow:hidden;
+  box-shadow:inset 0 3px 8px rgba(255,255,255,.3),inset 0 -3px 6px rgba(0,0,0,.1),0 7px 0 rgba(0,0,0,.15),0 12px 24px rgba(0,0,0,.2);
+  transition:filter .08s,transform .08s,box-shadow .15s;
+}
+.drum-block .face::before{content:'';position:absolute;inset:0;border-radius:14px;pointer-events:none;background-image:repeating-linear-gradient(8deg,transparent,transparent 9px,rgba(255,255,255,.06) 9px,rgba(255,255,255,.06) 10px);}
+.drum-block .face::after{content:'';position:absolute;top:8px;left:10px;right:45%;height:6px;border-radius:10px;background:rgba(255,255,255,.22);pointer-events:none;}
+.drum-block .face .bl{font-family:'Fredoka One',cursive;font-size:48px;line-height:1;color:rgba(255,255,255,.92);text-shadow:0 2px 5px rgba(0,0,0,.28);position:relative;z-index:1;}
+.drum-block .face .bn{font-size:10px;font-weight:800;letter-spacing:3px;color:rgba(255,255,255,.65);position:relative;z-index:1;}
+.drum-block .face .ring{position:absolute;border-radius:50%;border:3px solid rgba(255,255,255,.1);}
+.drum-block .face .r1{width:90px;height:90px;}
+.drum-block .face .r2{width:60px;height:60px;}
+.drum-block .slab{position:absolute;bottom:-7px;left:8px;right:8px;height:12px;border-radius:0 0 8px 8px;filter:brightness(.55);z-index:-1;}
+.drum-block .floor-shadow{position:absolute;bottom:-22px;left:50%;transform:translateX(-50%);width:100px;height:18px;background:radial-gradient(ellipse at center,rgba(80,45,10,.2) 0%,transparent 72%);border-radius:50%;}
+.b-kick .face{background:linear-gradient(145deg,#c0392b,#922b21,#7b241c);} .b-kick .slab{background:#6e1f19;}
+.b-snare .face{background:linear-gradient(145deg,#e67e22,#ca6f1e,#a04000);} .b-snare .slab{background:#873600;}
+.b-hihat .face{background:linear-gradient(145deg,#1abc9c,#148f77,#0e6655);} .b-hihat .slab{background:#0b5345;}
+.b-bass .face{background:linear-gradient(145deg,#2980b9,#1a6fa8,#154360);} .b-bass .slab{background:#123756;}
+
+/* mode badge */
+.drum-block .mode-badge{position:absolute;top:7px;left:7px;z-index:6;font-size:8px;font-weight:800;letter-spacing:1px;font-family:'Nunito',sans-serif;background:rgba(0,0,0,.35);color:rgba(255,255,255,.85);padding:2px 6px;border-radius:6px;transition:opacity .3s;opacity:0;}
+.drum-block.mode-active .mode-badge{opacity:1;}
+
+/* solo/muted state during playback */
+.drum-block.solo-active .face{box-shadow:inset 0 3px 8px rgba(255,255,255,.3),inset 0 -3px 6px rgba(0,0,0,.1),0 7px 0 rgba(0,0,0,.15),0 12px 24px rgba(0,0,0,.2),0 0 0 3px rgba(255,255,255,.5);}
+.drum-block.muted{opacity:0.38;filter:saturate(0.3);}
+.drum-block.muted .face{box-shadow:inset 0 3px 8px rgba(255,255,255,.1),inset 0 -3px 6px rgba(0,0,0,.05),0 4px 0 rgba(0,0,0,.1);}
+.disc-block.muted{opacity:0.38;filter:saturate(0.3);}
+
+/* SNAP GLOW */
+.drum-block.snap-target .face{animation:magpulse .45s ease-in-out infinite alternate;}
+@keyframes magpulse{
+  from{box-shadow:inset 0 3px 8px rgba(255,255,255,.3),inset 0 -3px 6px rgba(0,0,0,.1),0 7px 0 rgba(0,0,0,.15),0 0 0 3px rgba(255,220,60,.95),0 0 28px rgba(255,200,30,.7);}
+  to  {box-shadow:inset 0 3px 8px rgba(255,255,255,.3),inset 0 -3px 6px rgba(0,0,0,.1),0 7px 0 rgba(0,0,0,.15),0 0 0 5px rgba(255,230,80,1),0 0 45px rgba(255,210,40,1);}
+}
+.drum-block.in-chain .face{box-shadow:inset 0 3px 8px rgba(255,255,255,.3),inset 0 -3px 6px rgba(0,0,0,.1),0 7px 0 rgba(0,0,0,.15),0 12px 24px rgba(0,0,0,.2),0 0 0 3px rgba(255,220,60,.55);}
+.disc-block.in-chain .face{box-shadow:inset 0 3px 10px rgba(255,255,255,.08),inset 0 -3px 8px rgba(0,0,0,.3),0 8px 0 rgba(0,0,0,.22),0 14px 28px rgba(0,0,0,.28),0 0 0 3px rgba(0,220,255,.55);}
+.drum-block.hit .face{filter:brightness(1.4);transform:scale(.92) translateY(4px);}
+
+/* STEP DOT */
+.step-dot{position:absolute;bottom:8px;right:9px;width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.4);transition:background .05s,box-shadow .05s;z-index:5;}
+.step-dot.active{background:white;box-shadow:0 0 8px rgba(255,255,255,.95);}
+
+/* RIPPLE */
+.ripple{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.22);pointer-events:none;animation:rip .35s ease-out forwards;z-index:20;}
+@keyframes rip{to{transform:translate(-50%,-50%) scale(2.1);opacity:0;}}
+
+/* STRUM RIPPLE — thinner horizontal wave to suggest string vibration */
+.strum-ripple{
+  position:absolute;
+  left:0;right:0;
+  height:3px;
+  border-radius:2px;
+  background:rgba(255,255,255,0.7);
+  pointer-events:none;
+  animation:strum-wave .25s ease-out forwards;
+  z-index:25;
+}
+@keyframes strum-wave{
+  0%  {transform:scaleX(0.2) scaleY(1); opacity:1;}
+  60% {transform:scaleX(1.1) scaleY(2); opacity:0.8;}
+  100%{transform:scaleX(1.3) scaleY(0); opacity:0;}
+}
+
+/* ── DELETE BUTTON ── */
+.delete-btn{
+  position:absolute;top:-10px;right:-10px;
+  width:26px;height:26px;border-radius:50%;
+  background:#e74c3c;
+  border:3px solid #fff;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;color:white;line-height:1;
+  cursor:pointer;z-index:30;
+  box-shadow:0 2px 8px rgba(0,0,0,.3);
+  opacity:0;pointer-events:none;
+  transition:opacity .15s, transform .15s;
+  transform:scale(0.7);
+}
+.drum-block:hover .delete-btn,
+.dpad-block:hover .delete-btn,
+.disc-block:hover .delete-btn,
+.drum-block.touch-held .delete-btn,
+.dpad-block.touch-held .delete-btn,
+.disc-block.touch-held .delete-btn{
+  opacity:1;pointer-events:all;transform:scale(1);
+}
+.delete-btn:hover{background:#c0392b;transform:scale(1.15) !important;}
+.delete-btn:active{transform:scale(0.95) !important;}
+
+/* ── D-PAD BLOCK ── */
+.dpad-block{
+  position:absolute;width:160px;height:160px;
+  border-radius:16px;cursor:grab;touch-action:none;z-index:10;
+}
+.dpad-block:active{cursor:grabbing;}
+.dpad-block.dragging{z-index:500;}
+.dpad-block .face{
+  position:absolute;inset:0;border-radius:16px;overflow:hidden;
+  background:linear-gradient(145deg,#6c3483,#5b2c6f,#3b1a5e);
+  box-shadow:inset 0 3px 10px rgba(255,255,255,.18),inset 0 -3px 8px rgba(0,0,0,.2),0 8px 0 rgba(0,0,0,.2),0 14px 28px rgba(0,0,0,.25);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  transition:box-shadow .15s;
+}
+.dpad-block .face::before{content:'';position:absolute;inset:0;border-radius:16px;pointer-events:none;background-image:repeating-linear-gradient(8deg,transparent,transparent 9px,rgba(255,255,255,.05) 9px,rgba(255,255,255,.05) 10px);}
+.dpad-block .face::after{content:'';position:absolute;top:9px;left:11px;right:50%;height:6px;border-radius:10px;background:rgba(255,255,255,.18);pointer-events:none;}
+.dpad-block .slab{position:absolute;bottom:-8px;left:10px;right:10px;height:14px;border-radius:0 0 10px 10px;background:#2c1254;filter:brightness(.6);z-index:-1;}
+.dpad-block .floor-shadow{position:absolute;bottom:-26px;left:50%;transform:translateX(-50%);width:130px;height:20px;background:radial-gradient(ellipse at center,rgba(60,20,90,.2) 0%,transparent 72%);border-radius:50%;}
+.dpad-cross{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);width:90px;height:90px;gap:3px;position:relative;z-index:2;}
+.dp-cell{border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .08s;cursor:pointer;}
+.dp-cell.dp-blank{background:transparent;cursor:default;pointer-events:none;}
+.dp-cell.dp-btn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.7);}
+.dp-cell.dp-btn:hover{background:rgba(255,255,255,.2);}
+.dp-cell.dp-btn:active,.dp-cell.dp-btn.pressed{background:rgba(200,160,255,.5);color:white;transform:scale(.9);}
+.dp-cell.dp-center{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-radius:50%;cursor:default;}
+.dpad-instrument-label{font-family:'Fredoka One',cursive;font-size:11px;letter-spacing:1px;color:rgba(255,255,255,.5);position:relative;z-index:2;transition:all .3s;text-align:center;}
+.dpad-block.connected .dpad-instrument-label{color:rgba(255,255,255,.9);}
+.dpad-block.connected .face{box-shadow:inset 0 3px 10px rgba(255,255,255,.18),inset 0 -3px 8px rgba(0,0,0,.2),0 8px 0 rgba(0,0,0,.2),0 14px 28px rgba(0,0,0,.25),0 0 0 3px rgba(200,160,255,.6),0 0 22px rgba(160,80,255,.35);}
+.dpad-block.snap-target .face{animation:dmagpulse .45s ease-in-out infinite alternate;}
+@keyframes dmagpulse{
+  from{box-shadow:inset 0 3px 10px rgba(255,255,255,.18),inset 0 -3px 8px rgba(0,0,0,.2),0 8px 0 rgba(0,0,0,.2),0 0 0 3px rgba(200,100,255,.9),0 0 28px rgba(180,80,255,.7);}
+  to  {box-shadow:inset 0 3px 10px rgba(255,255,255,.18),inset 0 -3px 8px rgba(0,0,0,.2),0 8px 0 rgba(0,0,0,.2),0 0 0 5px rgba(220,140,255,1),0 0 45px rgba(200,100,255,1);}
+}
+
+/* ── CONNECTOR STRIP — bolder ── */
+.connector{
+  position:absolute;pointer-events:none;z-index:8;
+  display:flex;align-items:center;justify-content:center;
+}
+.connector .con-outer{
+  width:100%;height:48px;
+  background:rgba(180,130,0,.22);
+  border-radius:8px;
+  border:2.5px solid rgba(200,160,0,.55);
+  position:relative;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+}
+.connector .con-inner{
+  position:absolute;inset:4px;
+  background:linear-gradient(90deg,rgba(255,220,60,.25),rgba(255,215,0,.95),rgba(255,220,60,.25));
+  border-radius:5px;
+  box-shadow:0 0 16px rgba(255,200,30,.65),inset 0 1px 0 rgba(255,255,255,.4);
+}
+.connector .con-inner::after{
+  content:'';position:absolute;inset:0;border-radius:5px;
+  background:repeating-linear-gradient(90deg,transparent,transparent 5px,rgba(255,255,255,.2) 5px,rgba(255,255,255,.2) 7px);
+}
+.connector.playing .con-inner::before{
+  content:'';position:absolute;inset:0;border-radius:5px;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.65) 50%,transparent 100%);
+  animation:flow .55s linear infinite;
+}
+@keyframes flow{from{transform:translateX(-100%);}to{transform:translateX(100%);}}
+
+/* dpad connector — purple, bolder */
+.connector.dpad-con .con-outer{background:rgba(100,30,180,.18);border-color:rgba(160,80,255,.55);}
+.connector.dpad-con .con-inner{background:linear-gradient(90deg,rgba(160,80,255,.25),rgba(180,100,255,.95),rgba(160,80,255,.25));box-shadow:0 0 16px rgba(160,80,255,.6),inset 0 1px 0 rgba(255,255,255,.3);}
+.connector.dpad-con.playing .con-inner::before{background:linear-gradient(90deg,transparent 0%,rgba(230,190,255,.7) 50%,transparent 100%);}
+
+/* NOTE POP */
+.note-pop{position:fixed;font-size:20px;pointer-events:none;z-index:999;animation:nfly .8s ease-out forwards;}
+@keyframes nfly{0%{opacity:1;transform:translateY(0) scale(1);}100%{opacity:0;transform:translateY(-80px) scale(.7);}}
+
+/* instrument flash */
+.inst-flash{position:fixed;inset:0;pointer-events:none;z-index:900;opacity:0;animation:iflash .5s ease-out forwards;}
+@keyframes iflash{0%{opacity:.25;}100%{opacity:0;}}
+
+/* delete poof */
+.delete-poof{position:fixed;pointer-events:none;z-index:999;font-size:28px;animation:poof .5s ease-out forwards;}
+@keyframes poof{0%{opacity:1;transform:scale(1);}50%{transform:scale(1.6);}100%{opacity:0;transform:scale(0.5) translateY(-30px);}}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);font-family:'Fredoka One',cursive;font-size:16px;letter-spacing:2px;background:rgba(60,20,100,.88);color:#d4a8ff;padding:10px 24px;border-radius:14px;box-shadow:0 4px 20px rgba(0,0,0,.3),0 0 0 1px rgba(200,100,255,.3);z-index:800;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;}
+#toast.show{opacity:1;}
+
+/* HINT */
+#hint{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);font-family:'Fredoka One',cursive;font-size:12px;color:#b89070;letter-spacing:2px;z-index:200;opacity:.7;white-space:nowrap;pointer-events:none;}
+
+/* insertion snap preview — connector glows brighter when block hovers over it */
+.connector.insert-preview .con-outer{border-color:rgba(255,255,255,.7);animation:insert-pulse .35s ease-in-out infinite alternate;}
+.connector.insert-preview .con-inner{background:linear-gradient(90deg,rgba(255,255,255,.3),rgba(255,255,255,.95),rgba(255,255,255,.3));}
+@keyframes insert-pulse{
+  from{box-shadow:0 0 8px rgba(255,255,255,.4);}
+  to  {box-shadow:0 0 22px rgba(255,255,255,.8);}
+}
+
+/* WAVEFORM */
+#waveform{position:fixed;bottom:42px;left:50%;transform:translateX(-50%);width:280px;height:28px;opacity:.3;pointer-events:none;z-index:100;}
+
+/* ── JOYSTICK BLOCK ── */
+.disc-block{
+  position:absolute;width:140px;height:140px;
+  border-radius:16px;cursor:grab;touch-action:none;z-index:10;
+}
+.disc-block:active{cursor:grabbing;}
+.disc-block.dragging{z-index:500;}
+.disc-block .face{
+  position:absolute;inset:0;border-radius:16px;overflow:hidden;
+  background:linear-gradient(145deg,#1c1c28,#23233a,#1a1a2e);
+  box-shadow:inset 0 3px 10px rgba(255,255,255,.07),inset 0 -3px 8px rgba(0,0,0,.35),0 8px 0 rgba(0,0,0,.22),0 14px 28px rgba(0,0,0,.28);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  transition:box-shadow .15s;
+}
+.disc-block .face::before{content:'';position:absolute;inset:0;border-radius:16px;pointer-events:none;background-image:repeating-linear-gradient(8deg,transparent,transparent 9px,rgba(255,255,255,.025) 9px,rgba(255,255,255,.025) 10px);}
+.disc-block .face::after{content:'';position:absolute;top:9px;left:11px;right:52%;height:5px;border-radius:8px;background:rgba(255,255,255,.08);pointer-events:none;}
+.disc-block .dslab{position:absolute;bottom:-8px;left:10px;right:10px;height:13px;border-radius:0 0 10px 10px;background:#0d0d1a;filter:brightness(.55);z-index:-1;}
+.disc-block .floor-shadow{position:absolute;bottom:-26px;left:50%;transform:translateX(-50%);width:130px;height:20px;background:radial-gradient(ellipse at center,rgba(10,10,40,.22) 0%,transparent 72%);border-radius:50%;}
+
+/* Joystick gate — the outer ring */
+.joy-gate{
+  width:84px;height:84px;border-radius:50%;
+  background:radial-gradient(circle at 38% 32%, #2e2e45 0%, #1a1a2e 60%, #111120 100%);
+  border:2px solid rgba(255,255,255,.08);
+  box-shadow:inset 0 4px 12px rgba(0,0,0,.6),inset 0 -2px 4px rgba(255,255,255,.04),0 2px 8px rgba(0,0,0,.4);
+  position:relative;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+/* Gate octagon guide lines */
+.joy-gate::before{
+  content:'';position:absolute;inset:6px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.05);
+  pointer-events:none;
+}
+
+/* The thumb cap */
+.joy-cap{
+  width:36px;height:36px;border-radius:50%;
+  background:radial-gradient(circle at 38% 30%,#4a4a6a 0%,#2a2a45 45%,#1e1e35 100%);
+  border:1.5px solid rgba(255,255,255,.12);
+  box-shadow:
+    0 3px 8px rgba(0,0,0,.6),
+    0 1px 2px rgba(0,0,0,.4),
+    inset 0 1px 3px rgba(255,255,255,.1),
+    inset 0 -1px 2px rgba(0,0,0,.4);
+  cursor:grab;
+  position:absolute;
+  transition:transform .08s ease, box-shadow .08s;
+  user-select:none;
+  display:flex;align-items:center;justify-content:center;
+}
+.joy-cap:active{cursor:grabbing;}
+/* Concave grip texture on thumbcap */
+.joy-cap::before{
+  content:'';position:absolute;inset:4px;border-radius:50%;
+  background:radial-gradient(circle at 45% 40%,rgba(255,255,255,.07) 0%,transparent 60%);
+  pointer-events:none;
+}
+/* Ring of dots for grip */
+.joy-cap::after{
+  content:'';position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle at 50% 50%, transparent 36%, rgba(0,0,0,.25) 37%, transparent 38%),
+    radial-gradient(circle at 50% 50%, transparent 30%, rgba(255,255,255,.04) 31%, transparent 32%);
+  pointer-events:none;
+}
+.joy-cap.active{
+  box-shadow:0 1px 4px rgba(0,0,0,.6),0 0 0 2px rgba(255,140,60,.7),0 0 14px rgba(255,120,40,.4),inset 0 1px 3px rgba(255,255,255,.1);
+}
+
+/* XY readout bars */
+.joy-bars{
+  display:flex;flex-direction:column;gap:3px;width:82px;
+  position:relative;z-index:2;
+}
+.joy-bar-row{display:flex;align-items:center;gap:4px;}
+.joy-bar-lbl{font-size:7px;font-weight:800;letter-spacing:1px;font-family:'Nunito',sans-serif;color:rgba(255,255,255,.3);width:14px;flex-shrink:0;}
+.joy-bar-track{flex:1;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;position:relative;}
+.joy-bar-fill{height:100%;border-radius:2px;width:50%;transition:width .05s,background .15s;}
+
+/* axis colors */
+.joy-bar-x .joy-bar-fill{background:rgba(255,160,60,.9);}   /* amber = cutoff freq */
+.joy-bar-y .joy-bar-fill{background:rgba(255,80,180,.85);} /* pink = resonance */
+
+/* param label */
+.joy-param-label{
+  font-family:'Fredoka One',cursive;font-size:9px;letter-spacing:1px;
+  color:rgba(255,255,255,.32);position:relative;z-index:2;
+  transition:color .3s;text-align:center;line-height:1.3;
+}
+.disc-block.connected .joy-param-label{color:rgba(255,170,60,.9);}
+.disc-block.connected .face{
+  box-shadow:inset 0 3px 10px rgba(255,255,255,.07),inset 0 -3px 8px rgba(0,0,0,.35),
+    0 8px 0 rgba(0,0,0,.22),0 14px 28px rgba(0,0,0,.28),
+    0 0 0 2px rgba(255,150,50,.5),0 0 20px rgba(255,130,30,.22);
+}
+
+/* snap glow */
+.disc-block.snap-target .face{animation:joypulse .45s ease-in-out infinite alternate;}
+@keyframes joypulse{
+  from{box-shadow:inset 0 3px 10px rgba(255,255,255,.07),inset 0 -3px 8px rgba(0,0,0,.35),0 8px 0 rgba(0,0,0,.22),0 0 0 3px rgba(255,160,60,.9),0 0 28px rgba(255,130,30,.7);}
+  to  {box-shadow:inset 0 3px 10px rgba(255,255,255,.07),inset 0 -3px 8px rgba(0,0,0,.35),0 8px 0 rgba(0,0,0,.22),0 0 0 5px rgba(255,190,80,1),0 0 45px rgba(255,160,40,1);}
+}
+.disc-block.in-chain .face{box-shadow:inset 0 3px 10px rgba(255,255,255,.07),inset 0 -3px 8px rgba(0,0,0,.35),0 8px 0 rgba(0,0,0,.22),0 14px 28px rgba(0,0,0,.28),0 0 0 3px rgba(255,150,50,.5);}
+.disc-block.hit .face{filter:brightness(1.35);}
+.disc-block.muted{opacity:0.38;filter:saturate(0.3);}
+
+/* connector — warm amber for filter/joystick */
+.connector.disc-con .con-outer{background:rgba(255,140,40,.14);border-color:rgba(255,160,60,.5);}
+.connector.disc-con .con-inner{background:linear-gradient(90deg,rgba(255,140,40,.2),rgba(255,170,60,.95),rgba(255,140,40,.2));box-shadow:0 0 14px rgba(255,150,40,.55),inset 0 1px 0 rgba(255,255,255,.25);}
+.disc-block .step-dot{position:absolute;bottom:8px;right:9px;width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.2);transition:background .05s;z-index:5;}
+/* ── PROXIMITY MAT ── */
+.mat-block{
+  position:absolute;
+  border-radius:20px;
+  cursor:grab;
+  touch-action:none;
+  z-index:5;  /* sits below regular blocks */
+  min-width:320px;
+  min-height:260px;
+}
+.mat-block:active{cursor:grabbing;}
+.mat-block.dragging{z-index:500;}
+
+.mat-face{
+  position:absolute;inset:0;border-radius:20px;
+  background:
+    repeating-linear-gradient(0deg,   rgba(160,110,60,.04) 0px, rgba(160,110,60,.04) 1px, transparent 1px, transparent 32px),
+    repeating-linear-gradient(90deg,  rgba(160,110,60,.04) 0px, rgba(160,110,60,.04) 1px, transparent 1px, transparent 32px),
+    linear-gradient(145deg,#d4a96a,#c49455,#b07a3a);
+  box-shadow:
+    inset 0 2px 12px rgba(255,255,255,.25),
+    inset 0 -2px 8px rgba(0,0,0,.15),
+    0 8px 0 rgba(0,0,0,.18),
+    0 12px 32px rgba(0,0,0,.25);
+  border:3px solid rgba(140,90,30,.5);
+  overflow:hidden;
+}
+/* Wood grain lines */
+.mat-face::before{
+  content:'';position:absolute;inset:0;border-radius:18px;pointer-events:none;
+  background-image:
+    repeating-linear-gradient(3deg,  transparent, transparent 18px, rgba(100,60,10,.06) 18px, rgba(100,60,10,.06) 19px),
+    repeating-linear-gradient(178deg,transparent, transparent 24px, rgba(255,255,255,.04) 24px, rgba(255,255,255,.04) 25px);
+}
+/* Inset shadow border */
+.mat-face::after{
+  content:'';position:absolute;inset:6px;border-radius:14px;pointer-events:none;
+  border:1.5px solid rgba(180,120,50,.25);
+}
+
+/* Mat label */
+.mat-label{
+  position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
+  font-family:'Fredoka One',cursive;font-size:11px;letter-spacing:3px;
+  color:rgba(100,60,20,.45);pointer-events:none;white-space:nowrap;
+}
+
+/* Mat title corner */
+.mat-title{
+  position:absolute;top:8px;left:12px;
+  font-family:'Fredoka One',cursive;font-size:10px;letter-spacing:2px;
+  color:rgba(100,60,20,.4);pointer-events:none;
+}
+
+/* Resize handle */
+.mat-resize{
+  position:absolute;bottom:6px;right:8px;
+  width:18px;height:18px;cursor:se-resize;z-index:10;
+  opacity:.4;
+  background:
+    linear-gradient(135deg, transparent 40%, rgba(100,60,20,.5) 40%, rgba(100,60,20,.5) 55%, transparent 55%),
+    linear-gradient(135deg, transparent 55%, rgba(100,60,20,.4) 55%, rgba(100,60,20,.4) 70%, transparent 70%),
+    linear-gradient(135deg, transparent 70%, rgba(100,60,20,.3) 70%, rgba(100,60,20,.3) 85%, transparent 85%);
+}
+.mat-resize:hover{opacity:.75;}
+
+/* Mat delete button */
+.mat-delete{
+  position:absolute;top:-10px;right:-10px;
+  width:26px;height:26px;border-radius:50%;
+  background:#e74c3c;border:3px solid #fff;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;color:white;cursor:pointer;z-index:30;
+  box-shadow:0 2px 8px rgba(0,0,0,.3);
+  opacity:0;pointer-events:none;
+  transition:opacity .15s,transform .15s;transform:scale(.7);
+}
+.mat-block:hover .mat-delete{opacity:1;pointer-events:all;transform:scale(1);}
+.mat-delete:hover{background:#c0392b;transform:scale(1.15)!important;}
+
+/* Proximity lines between mat-mounted blocks */
+.prox-line{
+  position:absolute;pointer-events:none;z-index:6;
+  height:2px;border-radius:1px;transform-origin:left center;
+  background:linear-gradient(90deg,rgba(255,200,80,.7),rgba(255,160,40,.5));
+  box-shadow:0 0 6px rgba(255,180,40,.4);
+  transition:background .1s,box-shadow .1s;
+}
+.prox-line.close{background:linear-gradient(90deg,rgba(255,80,80,.8),rgba(255,40,40,.6));box-shadow:0 0 10px rgba(255,60,60,.6);}
+.prox-line.far  {background:linear-gradient(90deg,rgba(80,180,255,.6),rgba(40,140,255,.4));box-shadow:0 0 6px rgba(60,160,255,.4);}
+
+/* Block mounted on mat — smaller, no floor shadow, no slab sticking out */
+.on-mat{transform-origin:center;z-index:7!important;}
+.on-mat .floor-shadow{opacity:0;}
+.on-mat .slab{opacity:0;}
+.on-mat .dslab{opacity:0;}
+
+/* Freq indicator on mat */
+.mat-freq{
+  position:absolute;top:8px;right:14px;
+  font-family:'Fredoka One',cursive;font-size:11px;letter-spacing:1px;
+  color:rgba(100,60,20,.55);pointer-events:none;transition:color .2s;
+}
+.mat-freq.active{color:rgba(200,100,20,.9);}
+
+/* Tray mat block */
+.tc-mat{background:linear-gradient(145deg,#c49455,#8a6030);}
+
+/* Help button in tray */
+.hbtn{
+  font-family:'Fredoka One',cursive;font-size:15px;letter-spacing:1px;
+  background:rgba(139,94,60,.15);color:#8b5e3c;
+  border:1.5px solid rgba(139,94,60,.3);border-radius:10px;
+  padding:6px 13px;cursor:pointer;
+  transition:background .12s,color .12s;
+  flex-shrink:0;
+}
+.hbtn:hover{background:rgba(139,94,60,.28);color:#5a3a18;}
+
+/* ── HELP MODAL ── */
+#help-overlay{
+  position:fixed;inset:0;z-index:2000;
+  background:rgba(30,18,8,.72);
+  backdrop-filter:blur(6px);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;
+  transition:opacity .22s;
+}
+#help-overlay.open{opacity:1;pointer-events:all;}
+#help-modal{
+  background:#fdf6eb;
+  border-radius:20px;
+  border:2px solid rgba(160,110,50,.3);
+  box-shadow:0 24px 80px rgba(0,0,0,.35);
+  width:min(680px,92vw);
+  max-height:86vh;
+  overflow:hidden;
+  display:flex;flex-direction:column;
+  position:relative;
+}
+@media(max-width:768px){
+  #help-modal{width:96vw;max-height:90vh;border-radius:16px;}
+  #help-grid{grid-template-columns:1fr!important;}
+  .help-grid{grid-template-columns:1fr;}
+  #help-content{padding:20px 16px 18px;}
+  #help-title{font-size:22px;}
+}
+#help-close{
+  position:absolute;top:14px;right:16px;
+  width:30px;height:30px;border-radius:50%;
+  background:#e74c3c;border:2.5px solid #fff;
+  color:white;font-size:13px;font-weight:700;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 8px rgba(0,0,0,.2);
+  transition:background .1s,transform .1s;z-index:10;
+}
+#help-close:hover{background:#c0392b;transform:scale(1.1);}
+#help-content{
+  overflow-y:auto;padding:28px 28px 24px;
+  scrollbar-width:thin;scrollbar-color:rgba(160,110,50,.25) transparent;
+}
+#help-header{margin-bottom:14px;}
+#help-title{font-family:'Fredoka One',cursive;font-size:28px;color:#5a3310;letter-spacing:3px;line-height:1;}
+#help-sub{font-size:11px;font-weight:800;letter-spacing:2px;color:#b08050;margin-top:3px;}
+#help-intro{font-size:13px;color:#6b4020;line-height:1.7;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid rgba(160,110,50,.15);}
+.help-section-title{
+  font-family:'Fredoka One',cursive;font-size:11px;letter-spacing:3px;
+  color:#b08050;margin:18px 0 10px;
+}
+/* Cards grid */
+.help-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:4px;}
+.help-card{
+  background:rgba(160,110,50,.07);border-radius:12px;
+  border:1px solid rgba(160,110,50,.15);padding:12px 14px;
+}
+.help-card-head{
+  font-family:'Fredoka One',cursive;font-size:13px;color:#5a3310;
+  display:flex;align-items:center;gap:6px;margin-bottom:5px;
+}
+.help-icon{font-size:14px;}
+.help-card-body{font-size:12px;color:#6b4020;line-height:1.6;}
+.help-card-body b{color:#5a3310;}
+/* Rows */
+.help-rows{display:flex;flex-direction:column;gap:5px;}
+.help-row{
+  display:flex;align-items:baseline;gap:10px;
+  font-size:12px;color:#6b4020;line-height:1.5;
+}
+.help-tag{
+  font-family:'Fredoka One',cursive;font-size:10px;letter-spacing:1px;
+  background:rgba(160,110,50,.15);color:#8b5030;
+  border-radius:6px;padding:2px 8px;flex-shrink:0;min-width:52px;text-align:center;
+}
+.help-num{
+  font-family:'Fredoka One',cursive;font-size:13px;color:#b08050;
+  width:18px;flex-shrink:0;text-align:center;
+}
+/* Key hints */
+#help-keys{
+  display:flex;flex-wrap:wrap;gap:6px;
+  margin-top:18px;padding-top:14px;
+  border-top:1px solid rgba(160,110,50,.15);
+}
+#help-keys span{
+  font-family:'Space Mono',monospace;font-size:10px;
+  background:rgba(160,110,50,.1);color:#8b5030;
+  border:1px solid rgba(160,110,50,.2);border-radius:6px;
+  padding:3px 9px;
+}
+
+/* ── TOUCH / IPAD ENHANCEMENTS ── */
+.drum-block,.dpad-block,.disc-block,.mat-block,.tray-block{
+  -webkit-tap-highlight-color:transparent;
+}
+.dp-cell.dp-btn,.joy-cap,.delete-btn,.mat-delete,.zoom-btn,.hbtn,.play-btn{
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+}
+/* Larger hit area for dp buttons on touch */
+@media(pointer:coarse){
+  .dp-cell{min-width:28px;min-height:28px;}
+  .drum-block .face .bl{font-size:42px;}
+  .joy-cap{width:40px;height:40px;}
+  .hbtn{padding:8px 16px;font-size:13px;}
+  #bpm-knob input[type=range]{width:70px;height:6px;}
+  #bpm-knob input[type=range]::-webkit-slider-thumb{width:22px;height:22px;}
+  .delete-btn,.mat-delete{
+    opacity:0.85;pointer-events:all;transform:scale(1);
+  }
+}
+</style>
+</head>
+<body>
+
+<div id="tray">
+  <div id="tray-label">BLOCKS</div>
+  <div class="tray-block tc-kick"  onmousedown="startTrayDrag(event,'kick')"  ontouchstart="startTrayDrag(event,'kick')"><span class="tl">K</span><span class="ts">KICK</span></div>
+  <div class="tray-block tc-snare" onmousedown="startTrayDrag(event,'snare')" ontouchstart="startTrayDrag(event,'snare')"><span class="tl">S</span><span class="ts">SNARE</span></div>
+  <div class="tray-block tc-hihat" onmousedown="startTrayDrag(event,'hihat')" ontouchstart="startTrayDrag(event,'hihat')"><span class="tl">H</span><span class="ts">HI-HAT</span></div>
+  <div class="tray-block tc-bass"  onmousedown="startTrayDrag(event,'bass')"  ontouchstart="startTrayDrag(event,'bass')"><span class="tl">B</span><span class="ts">BASS</span></div>
+  <div class="tray-sep"></div>
+  <div class="tray-block tc-dpad"  onmousedown="startTrayDrag(event,'dpad')" ontouchstart="startTrayDrag(event,'dpad')"><span class="tl">✛</span><span class="ts">D-PAD</span></div>
+  <div class="tray-block" style="background:linear-gradient(145deg,#2a1e0e,#1c1408);" onmousedown="startTrayDrag(event,'disc')" ontouchstart="startTrayDrag(event,'disc')"><span class="tl" style="font-size:18px">🕹</span><span class="ts">JOYSTICK</span></div>
+  <div class="tray-block tc-mat" onmousedown="startTrayDrag(event,'mat')" ontouchstart="startTrayDrag(event,'mat')"><span class="tl" style="font-size:16px">🟫</span><span class="ts">MAT</span></div>
+  <div id="tray-right">
+    <div id="bpm-knob">BPM <input type="range" id="bpm-slider" min="60" max="200" value="120"><span id="bpm-val">120</span></div>
+    <button id="play-btn" onclick="togglePlay()">▶ PLAY</button>
+    <button class="hbtn" onclick="toggleHelp()">How to play</button>
+  </div>
+</div>
+
+<div id="canvas">
+  <div id="world"></div>
+</div>
+
+<!-- HELP MODAL -->
+<div id="help-overlay" onclick="closeHelp(event)">
+  <div id="help-modal">
+    <button id="help-close" onclick="toggleHelp()">✕</button>
+    <div id="help-content">
+      <div id="help-header">
+        <div id="help-title">C2</div>
+        <div id="help-sub">Musical Play Instrument · Prototype</div>
+      </div>
+
+      <p id="help-intro">C2 is a simulation of a physical modular music toy. Wooden blocks connect magnetically — their arrangement makes music. This is the digital prototype. Pick up a block and start.</p>
+
+      <div class="help-section-title">THE BLOCKS</div>
+      <div class="help-grid">
+        <div class="help-card">
+          <div class="help-card-head"><span class="help-icon">🥁</span> K · S · H · B</div>
+          <div class="help-card-body">The four sound blocks — Kick, Snare, Hi-Hat, Bass. Tap to play. Connect two or more and they loop in sequence.</div>
+        </div>
+        <div class="help-card">
+          <div class="help-card-head"><span class="help-icon">✛</span> D-PAD</div>
+          <div class="help-card-body">Snap to a chain to switch instruments. <b>↑ / ↓</b> cycles through Drums · Piano · Strings · Horns · Guitar. Works live mid-loop.</div>
+        </div>
+        <div class="help-card">
+          <div class="help-card-head"><span class="help-icon">🕹</span> JOYSTICK</div>
+          <div class="help-card-body">Snap to a chain to activate a live filter. <b>Left/Right</b> = cutoff frequency. <b>Up/Down</b> = resonance. Stick springs back to center.</div>
+        </div>
+        <div class="help-card">
+          <div class="help-card-head"><span class="help-icon">🟫</span> MAT</div>
+          <div class="help-card-body">Drop blocks onto the mat. The <b>distance between them</b> controls pitch — closer = higher, further = lower. Drag blocks while playing to sweep pitch live.</div>
+        </div>
+      </div>
+
+      <div class="help-section-title">CONNECTING</div>
+      <div class="help-rows">
+        <div class="help-row"><span class="help-tag">Snap</span> Drag a block near any other block — it glows gold and clicks into place.</div>
+        <div class="help-row"><span class="help-tag">Insert</span> Drag toward the connector between two joined blocks — it glows white. Drop to slot in mid-chain.</div>
+        <div class="help-row"><span class="help-tag">Group</span> Grab any block in a chain — the whole chain moves together.</div>
+        <div class="help-row"><span class="help-tag">Detach</span> Drag a block away from its chain — it separates on first movement.</div>
+        <div class="help-row"><span class="help-tag">Delete</span> Hover a block → red ✕ appears → click. Or right-click.</div>
+      </div>
+
+      <div class="help-section-title">PLAYING</div>
+      <div class="help-rows">
+        <div class="help-row"><span class="help-tag">Loop</span> Hit ▶ PLAY. Only chains of 2+ blocks loop — solo blocks stay silent. Mat blocks always play.</div>
+        <div class="help-row"><span class="help-tag">Tap</span> Click any block at any time to trigger it, even during a loop.</div>
+        <div class="help-row"><span class="help-tag">Strum</span> In Guitar mode — grab a block and <b>shake it side to side</b>. Each pass strums one string.</div>
+        <div class="help-row"><span class="help-tag">BPM</span> Drag the slider in the top bar to change tempo (60–200 BPM).</div>
+      </div>
+
+      <div class="help-section-title">CANVAS</div>
+      <div class="help-rows">
+        <div class="help-row"><span class="help-tag">Zoom</span> Scroll wheel · or + / − buttons (bottom-right)</div>
+        <div class="help-row"><span class="help-tag">Pan</span> Middle mouse drag · or hold Space + drag</div>
+        <div class="help-row"><span class="help-tag">Reset</span> ⌖ button to return to default view</div>
+      </div>
+
+      <div class="help-section-title">TRY THIS</div>
+      <div class="help-rows">
+        <div class="help-row"><span class="help-num">1</span> Snap K → S → H → B in a row and hit Play for an instant beat.</div>
+        <div class="help-row"><span class="help-num">2</span> Attach the D-Pad and press ↑ while playing to switch to Piano.</div>
+        <div class="help-row"><span class="help-num">3</span> Add the Joystick. Sweep it left and right while the loop runs.</div>
+        <div class="help-row"><span class="help-num">4</span> Drop a Mat. Put all four blocks on it. Drag them apart while playing.</div>
+        <div class="help-row"><span class="help-num">5</span> Switch to Guitar. Shake a block side to side to strum a chord.</div>
+      </div>
+
+      <div id="help-keys">
+        <span>A = Kick</span><span>S = Snare</span><span>D = Hi-Hat</span><span>F = Bass</span><span>↑↓ = Instrument (D-Pad connected)</span><span>Space = Pan</span>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="zoom-controls">
+  <div class="zoom-btn" onclick="zoomBy(0.15)">+</div>
+  <div id="zoom-level">100%</div>
+  <div class="zoom-btn" onclick="zoomBy(-0.15)">−</div>
+  <div class="zoom-btn" onclick="resetView()" title="reset">⌖</div>
+</div>
+<div id="toast"></div>
+<canvas id="waveform" width="280" height="28"></canvas>
+<div id="hint">hover → ✕ delete · snap blocks to loop · drag MAT from tray · drop blocks on mat · closer = higher pitch</div>
+
+<script>
+/* ══════════════════════════════
+   INSTRUMENT DEFINITIONS
+══════════════════════════════ */
+const INSTRUMENTS=['drums','piano','strings','horns','guitar'];
+const INSTRUMENT_ICONS={drums:'🥁',piano:'🎹',strings:'🎻',horns:'🎺',guitar:'🎸'};
+const INSTRUMENT_COLORS={
+  drums: {r:'#c0392b',g:'#e67e22',b:'#1abc9c',k:'#2980b9'},
+  piano: {r:'#8e44ad',g:'#9b59b6',b:'#7d3c98',k:'#6c3483'},
+  strings:{r:'#1e8449',g:'#27ae60',b:'#229954',k:'#1a5276'},
+  horns: {r:'#b7770d',g:'#d4ac0d',b:'#b8860b',k:'#9a7d0a'},
+  guitar:{r:'#c0392b',g:'#e74c3c',b:'#a93226',k:'#7b241c'}
+};
+const INSTRUMENT_SOUNDS={
+  drums: {kick:()=>playKick(),snare:()=>playSnare(),hihat:()=>playHihat(),bass:()=>playBass()},
+  piano: {
+    kick: ()=>playChord('piano',[261.63,329.63,392.00],.8),
+    snare:()=>playChord('piano',[293.66,369.99,440.00],.8),
+    hihat:()=>playChord('piano',[349.23,440.00,523.25],.8),
+    bass: ()=>playNote('piano',130.81,1.0)
+  },
+  strings:{
+    kick: ()=>playChord('strings',[261.63,329.63,392.00],1.2),
+    snare:()=>playChord('strings',[220.00,277.18,329.63],1.2),
+    hihat:()=>playChord('strings',[392.00,493.88,587.33],1.0),
+    bass: ()=>playNote('strings',110.00,1.4)
+  },
+  horns:{
+    kick: ()=>playChord('horns',[261.63,329.63,392.00],1.0),
+    snare:()=>playChord('horns',[293.66,369.99,440.00],1.0),
+    hihat:()=>playChord('horns',[349.23,440.00,523.25],.9),
+    bass: ()=>playNote('horns',87.31,1.3)
+  },
+  guitar:{
+    kick: ()=>playStrum([196.00,246.94,293.66,392.00],0.9),  // G chord strum low→high
+    snare:()=>playStrum([220.00,277.18,329.63,440.00],0.9),  // A chord strum
+    hihat:()=>playStrum([261.63,329.63,392.00,523.25],0.85), // C chord strum
+    bass: ()=>playStrum([98.00,130.81,196.00],1.1)            // G bass strum (3 strings)
+  }
+};
+let currentInstrument='drums';
+// Global audio params
+let globalAttack=0.015, globalVolume=0.8, globalPitch=0;
+
+/* ── JOYSTICK FILTER CHAIN ── */
+// A single persistent lowpass BiquadFilter sits between all audio and the destination.
+// When joystick is connected, it comes alive. When disconnected, it's bypassed (cutoff=22kHz).
+let joyFilterNode=null;
+let joyFilterCutoff=18000;  // Hz — current cutoff, updated live by joystick
+let joyFilterQ=0.7;         // resonance — updated live by joystick
+let joystickConnected=false;
+
+function getJoyFilter(){
+  const ac=getCtx();
+  if(!joyFilterNode){
+    joyFilterNode=ac.createBiquadFilter();
+    joyFilterNode.type='lowpass';
+    joyFilterNode.frequency.value=joyFilterCutoff;
+    joyFilterNode.Q.value=joyFilterQ;
+    joyFilterNode.connect(ac.destination);
+  }
+  return joyFilterNode;
+}
+
+function setJoyFilter(cutoff, q){
+  joyFilterCutoff=cutoff;
+  joyFilterQ=q;
+  if(joyFilterNode){
+    // Use setTargetAtTime for smooth, click-free sweeping
+    const ac=getCtx();
+    joyFilterNode.frequency.setTargetAtTime(cutoff, ac.currentTime, 0.015);
+    joyFilterNode.Q.setTargetAtTime(q, ac.currentTime, 0.015);
+  }
+}
+
+function dest(){
+  // Route audio through the filter when joystick is connected, bypass otherwise
+  if(joystickConnected){
+    return getJoyFilter();
+  }
+  return getCtx().destination;
+}
+
+// Map joystick X (-1..1) → filter cutoff on log scale (80Hz..18kHz)
+function jxToCutoff(jx){
+  const minHz=80, maxHz=18000;
+  const t=(jx+1)/2; // 0..1
+  return minHz*Math.pow(maxHz/minHz, t); // exponential sweep
+}
+
+// Map joystick Y (-1..1) → resonance Q (0.5..18)
+// Centre = neutral Q=0.7, push up = high resonance squeal
+function jyToQ(jy){
+  const t=(-jy+1)/2; // invert: push stick UP = high Q
+  return 0.5+Math.pow(t,2)*17.5; // quadratic so extremes feel dramatic
+}
+
+/* ══════════════════════════════
+   AUDIO
+══════════════════════════════ */
+const AC=window.AudioContext||window.webkitAudioContext;
+let actx=null;
+function getCtx(){if(!actx)actx=new AC();return actx;}
+
+function playKick(){
+  const ac=getCtx(),g=ac.createGain(),o=ac.createOscillator(),og=ac.createGain();
+  const kp=Math.pow(2,proximityPitchShift/12);
+  o.frequency.setValueAtTime(160*kp,ac.currentTime);o.frequency.exponentialRampToValueAtTime(38*kp,ac.currentTime+.18);
+  og.gain.setValueAtTime(1.4,ac.currentTime);og.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.3);
+  g.gain.value=1.1;o.connect(og);og.connect(g);g.connect(dest());o.start();o.stop(ac.currentTime+.34);
+  const c=ac.createOscillator(),cg=ac.createGain();
+  c.frequency.value=3200;cg.gain.setValueAtTime(.4,ac.currentTime);cg.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.012);
+  c.connect(cg);cg.connect(dest());c.start();c.stop(ac.currentTime+.015);
+  waveHit();
+}
+function playSnare(){
+  const ac=getCtx(),o=ac.createOscillator(),og=ac.createGain();
+  const sp=Math.pow(2,proximityPitchShift/12);
+  o.frequency.setValueAtTime(220*sp,ac.currentTime);o.frequency.exponentialRampToValueAtTime(100*sp,ac.currentTime+.1);
+  og.gain.setValueAtTime(.8,ac.currentTime);og.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.18);
+  o.connect(og);og.connect(dest());o.start();o.stop(ac.currentTime+.2);
+  const buf=ac.createBuffer(1,ac.sampleRate*.22,ac.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,1.8);
+  const src=ac.createBufferSource();src.buffer=buf;
+  const f=ac.createBiquadFilter();f.type='bandpass';f.frequency.value=2800;f.Q.value=.6;
+  const ng=ac.createGain();ng.gain.value=.9;src.connect(f);f.connect(ng);ng.connect(dest());src.start();src.stop(ac.currentTime+.24);
+  waveHit();
+}
+function playHihat(){
+  const ac=getCtx(),buf=ac.createBuffer(1,ac.sampleRate*.09,ac.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2.5);
+  const src=ac.createBufferSource();src.buffer=buf;
+  const f=ac.createBiquadFilter();f.type='highpass';f.frequency.value=9000;
+  const g=ac.createGain();g.gain.setValueAtTime(.7,ac.currentTime);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.09);
+  src.connect(f);f.connect(g);g.connect(dest());src.start();src.stop(ac.currentTime+.1);
+  [3500,7000].forEach((fr,i)=>{const o=ac.createOscillator();o.type='square';const og=ac.createGain();
+    o.frequency.value=fr;og.gain.setValueAtTime(.06-i*.02,ac.currentTime);og.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.07);
+    o.connect(og);og.connect(dest());o.start();o.stop(ac.currentTime+.08);});
+  waveHit();
+}
+function playBass(){
+  const ac=getCtx(),o=ac.createOscillator();o.type='sawtooth';
+  const f=ac.createBiquadFilter();f.type='lowpass';f.frequency.value=500;f.Q.value=3;
+  const g=ac.createGain();
+  o.frequency.setValueAtTime(60,ac.currentTime);o.frequency.exponentialRampToValueAtTime(55,ac.currentTime+.05);
+  g.gain.setValueAtTime(0,ac.currentTime);g.gain.linearRampToValueAtTime(1.1,ac.currentTime+.015);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.45);
+  o.connect(f);f.connect(g);g.connect(dest());o.start();o.stop(ac.currentTime+.5);
+  const sub=ac.createOscillator(),sg=ac.createGain();
+  sub.frequency.value=30;sg.gain.setValueAtTime(.8,ac.currentTime);sg.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.35);
+  sub.connect(sg);sg.connect(dest());sub.start();sub.stop(ac.currentTime+.4);
+  waveHit();
+}
+function playNote(inst,freq,vol){
+  const ac=getCtx();
+  // Apply proximity pitch shift from mat
+  if(proximityPitchShift!==0) freq=freq*Math.pow(2,proximityPitchShift/12);
+  const dur=inst==='piano'?.9:inst==='strings'?1.4:inst==='guitar'?.8:.7;
+  const attack=inst==='strings'?Math.max(0.02,globalAttack*4):Math.max(0.005,globalAttack);
+  if(inst==='piano'){
+    [1,2,3].forEach((h)=>{
+      const o=ac.createOscillator(),g=ac.createGain();
+      o.type='sine';o.frequency.value=freq*h;
+      g.gain.setValueAtTime(0,ac.currentTime);g.gain.linearRampToValueAtTime(vol/(h*h)*.6,ac.currentTime+.01);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+dur/(h*.5));
+      o.connect(g);g.connect(dest());o.start();o.stop(ac.currentTime+dur);
+    });
+  }else if(inst==='strings'){
+    const o=ac.createOscillator();o.type='sawtooth';
+    const f=ac.createBiquadFilter();f.type='lowpass';f.frequency.value=freq*4;
+    const g=ac.createGain();o.frequency.value=freq;
+    g.gain.setValueAtTime(0,ac.currentTime);g.gain.linearRampToValueAtTime(vol*.5,ac.currentTime+attack);g.gain.setValueAtTime(vol*.5,ac.currentTime+dur*.7);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+dur);
+    const lfo=ac.createOscillator(),lfoG=ac.createGain();lfo.frequency.value=5.5;lfoG.gain.value=3;lfo.connect(lfoG);lfoG.connect(o.frequency);lfo.start();lfo.stop(ac.currentTime+dur);
+    o.connect(f);f.connect(g);g.connect(dest());o.start();o.stop(ac.currentTime+dur);
+  }else if(inst==='horns'){
+    const o=ac.createOscillator();o.type='square';
+    const f=ac.createBiquadFilter();f.type='lowpass';f.frequency.value=freq*6;f.Q.value=1;
+    const g=ac.createGain();o.frequency.value=freq;
+    g.gain.setValueAtTime(0,ac.currentTime);g.gain.linearRampToValueAtTime(vol*.55,ac.currentTime+.04);g.gain.setValueAtTime(vol*.55,ac.currentTime+dur*.6);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+dur);
+    o.connect(f);f.connect(g);g.connect(dest());o.start();o.stop(ac.currentTime+dur);
+  }else if(inst==='guitar'){
+    // True Karplus-Strong nylon-string acoustic guitar
+    // Natural duration: lower strings ring longer, like a real guitar
+    const noteDur = Math.min(3.5, 0.5 + 220/freq * 2.2);
+    const N = Math.round(ac.sampleRate / freq);
+    const totalSamples = Math.ceil(ac.sampleRate * noteDur);
+
+    // Build the full decay waveform via K-S algorithm (offline, then play as buffer)
+    const outBuf = ac.createBuffer(1, totalSamples, ac.sampleRate);
+    const out = outBuf.getChannelData(0);
+
+    // Seed with gaussian noise — softer, more nylon than harsh white noise
+    const ring = new Float32Array(N);
+    for(let i=0;i<N;i++){
+      const u1=Math.max(1e-10,Math.random()), u2=Math.random();
+      ring[i] = Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2)*0.5;
+    }
+
+    // K-S feedback: average adjacent samples (first-order lowpass) with loss factor
+    // loss 0.996 = warm nylon decay (steel would be ~0.999)
+    const loss = 0.996;
+    for(let i=0;i<totalSamples;i++){
+      const idx = i % N;
+      const nxt = (i+1) % N;
+      out[i] = ring[idx];
+      ring[idx] = loss * 0.5 * (ring[idx] + ring[nxt]);
+    }
+
+    const src = ac.createBufferSource();
+    src.buffer = outBuf;
+
+    // Tone shaping for nylon/classical acoustic character:
+    // 1) Roll off harsh highs above 3.5kHz (nylon strings are mellow)
+    const hiShelf = ac.createBiquadFilter();
+    hiShelf.type = 'highshelf';
+    hiShelf.frequency.value = 3500;
+    hiShelf.gain.value = -16;
+
+    // 2) Warm body resonance around 150-200Hz (guitar soundboard boom)
+    const body = ac.createBiquadFilter();
+    body.type = 'peaking';
+    body.frequency.value = 170;
+    body.Q.value = 0.7;
+    body.gain.value = 6;
+
+    // 3) Slight finger presence at 1kHz — the "pluck" click of a nylon string
+    const presence = ac.createBiquadFilter();
+    presence.type = 'peaking';
+    presence.frequency.value = 1000;
+    presence.Q.value = 1.5;
+    presence.gain.value = 4;
+
+    const g = ac.createGain();
+    g.gain.value = vol * 1.1;
+
+    src.connect(hiShelf);
+    hiShelf.connect(body);
+    body.connect(presence);
+    presence.connect(g);
+    g.connect(dest());
+    src.start(ac.currentTime);
+  }
+  waveHit();
+}
+function playChord(inst,freqs,vol){freqs.forEach(f=>playNote(inst,f,vol/freqs.length*1.2));}
+
+// Guitar strum — each string plucked ~18ms apart, low to high
+function playStrum(freqs,vol){
+  const strumDelay=0.018; // 18ms between strings
+  freqs.forEach((freq,i)=>{
+    setTimeout(()=>playNote('guitar',freq,vol),i*strumDelay*1000);
+  });
+}
+
+/* ══════════════════════════════
+   WAVEFORM
+══════════════════════════════ */
+const wfc=document.getElementById('waveform'),wfx=wfc.getContext('2d');
+let wfData=new Array(280).fill(0),wfRaf=null;
+function waveHit(){
+  for(let i=0;i<35;i++)wfData[Math.floor(Math.random()*280)]=(Math.random()*2-1)*.85;
+  if(!wfRaf)drawWave();
+}
+function drawWave(){
+  wfx.clearRect(0,0,280,28);wfx.strokeStyle='#8b5e3c';wfx.lineWidth=1.5;wfx.beginPath();
+  wfData.forEach((v,i)=>{i===0?wfx.moveTo(i,14+v*12):wfx.lineTo(i,14+v*12);});wfx.stroke();
+  wfData=wfData.map(v=>v*.88);
+  if(wfData.some(v=>Math.abs(v)>.005))wfRaf=requestAnimationFrame(drawWave);
+  else{wfRaf=null;wfx.clearRect(0,0,280,28);}
+}
+
+/* ══════════════════════════════
+   BLOCK SYSTEM
+══════════════════════════════ */
+const BLOCK_W=120,BLOCK_H=120,DPAD_W=160,DPAD_H=160,GAP=10,SNAP_DIST=80;
+let blocks=[],idCounter=0;
+const canvasEl=document.getElementById('canvas'); // the viewport
+const canvas=document.getElementById('world');          // the scrollable world
+function blockById(id){return blocks.find(b=>b.id===id)||null;}
+
+/* ── PAN / ZOOM STATE ── */
+let panX=0, panY=0, zoom=1;
+const MIN_ZOOM=0.2, MAX_ZOOM=3;
+
+function applyTransform(){
+  const t=`translate(${panX}px,${panY}px) scale(${zoom})`;
+  canvas.style.transform=t;
+  canvas.style.webkitTransform=t;
+  document.getElementById('zoom-level').textContent=Math.round(zoom*100)+'%';
+}
+
+// Convert a screen point (client coords) → world coords
+function screenToWorld(cx,cy){
+  // Use canvasEl's actual CSS top (68px tray) — more reliable than getBoundingClientRect on iPad
+  const cr=canvasEl.getBoundingClientRect();
+  const left=cr.left||0;
+  const top=cr.top||68;
+  return {
+    x:(cx - left - panX)/zoom,
+    y:(cy - top  - panY)/zoom
+  };
+}
+
+function zoomBy(delta,pivotX,pivotY){
+  const newZoom=Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,zoom+delta));
+  if(newZoom===zoom) return;
+  // Pivot around the mouse position (or screen center if not given)
+  const cr=canvasEl.getBoundingClientRect();
+  const px=pivotX!=null?pivotX-cr.left:cr.width/2;
+  const py=pivotY!=null?pivotY-cr.top :cr.height/2;
+  panX=px-(px-panX)*(newZoom/zoom);
+  panY=py-(py-panY)*(newZoom/zoom);
+  zoom=newZoom;
+  applyTransform();
+}
+
+function resetView(){
+  panX=0;panY=0;zoom=1;
+  applyTransform();
+}
+
+/* ── MIDDLE-MOUSE / SPACE-DRAG PAN ── */
+let panning=false, panStartX=0, panStartY=0, panStartPX=0, panStartPY=0;
+let spaceDown=false;
+
+canvasEl.addEventListener('mousedown',e=>{
+  // Pan on middle mouse OR when space is held
+  if(e.button===1||(e.button===0&&spaceDown)){
+    e.preventDefault();
+    panning=true;
+    panStartX=e.clientX; panStartY=e.clientY;
+    panStartPX=panX; panStartPY=panY;
+    canvasEl.classList.add('panning');
+  }
+});
+// Touch state for 2-finger pan + pinch
+let touch2StartX=0,touch2StartY=0,touch2PanStartX=0,touch2PanStartY=0;
+let pinchStartDist=0,pinchStartZoom=1,pinchMidX=0,pinchMidY=0;
+let isTwoFinger=false;
+
+canvasEl.addEventListener('touchstart',e=>{
+  if(e.touches.length===2){
+    isTwoFinger=true;
+    panning=false;
+    const t0=e.touches[0],t1=e.touches[1];
+    pinchStartDist=Math.hypot(t0.clientX-t1.clientX,t0.clientY-t1.clientY);
+    pinchStartZoom=zoom;
+    pinchMidX=(t0.clientX+t1.clientX)/2;
+    pinchMidY=(t0.clientY+t1.clientY)/2;
+    touch2StartX=pinchMidX; touch2StartY=pinchMidY;
+    touch2PanStartX=panX; touch2PanStartY=panY;
+  } else {
+    isTwoFinger=false;
+  }
+},{passive:true});
+
+document.addEventListener('mousemove',e=>{
+  if(!panning) return;
+  panX=panStartPX+(e.clientX-panStartX);
+  panY=panStartPY+(e.clientY-panStartY);
+  applyTransform();
+});
+document.addEventListener('mouseup',e=>{
+  if(panning&&(e.button===1||(e.button===0&&spaceDown))){
+    panning=false;canvasEl.classList.remove('panning');
+  }
+});
+canvasEl.addEventListener('touchmove',e=>{
+  if(e.touches.length===2){
+    e.preventDefault();
+    const t0=e.touches[0],t1=e.touches[1];
+    const dist=Math.hypot(t0.clientX-t1.clientX,t0.clientY-t1.clientY);
+    const midX=(t0.clientX+t1.clientX)/2;
+    const midY=(t0.clientY+t1.clientY)/2;
+    // Zoom
+    const newZoom=Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,pinchStartZoom*(dist/Math.max(1,pinchStartDist))));
+    const cr2=canvasEl.getBoundingClientRect();
+    const px=pinchMidX-cr2.left, py=pinchMidY-cr2.top;
+    panX=px-(px-touch2PanStartX)*(newZoom/pinchStartZoom)+(midX-touch2StartX);
+    panY=py-(py-touch2PanStartY)*(newZoom/pinchStartZoom)+(midY-touch2StartY);
+    zoom=newZoom;
+    applyTransform();
+  }
+},{passive:false});
+
+// Scroll-to-zoom
+canvasEl.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const delta=e.deltaY<0?0.1:-0.1;
+  zoomBy(delta*zoom*0.8, e.clientX, e.clientY);
+},{passive:false});
+
+// Space bar to enable pan mode
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'&&!e.target.matches('input,textarea')){
+    e.preventDefault();
+    spaceDown=true;
+    canvasEl.style.cursor='grab';
+  }
+});
+document.addEventListener('keyup',e=>{
+  if(e.code==='Space'){
+    spaceDown=false;
+    if(!panning) canvasEl.style.cursor='';
+  }
+});
+
+/* ── make drum block ── */
+function makeBlock(type,x,y){
+  const id=++idCounter;
+  const el=document.createElement('div');
+  el.className=`drum-block b-${type}`;
+  el.dataset.id=id;el.dataset.type=type;
+  el.style.left=x+'px';el.style.top=y+'px';
+  el.innerHTML=`
+    <div class="face">
+      <div class="ring r1"></div><div class="ring r2"></div>
+      <div class="bl">${type[0].toUpperCase()}</div>
+      <div class="bn" id="bn-${id}">${type.toUpperCase()}</div>
+      <div class="mode-badge" id="mb-${id}"></div>
+    </div>
+    <div class="slab"></div><div class="floor-shadow"></div><div class="step-dot"></div>
+    <div class="delete-btn" onmousedown="deleteBlock(event,${id})" ontouchstart="deleteBlock(event,${id})">✕</div>`;
+  canvas.appendChild(el);
+  const block={id,type,el,x,y,rightNeighbor:null,leftNeighbor:null,isDpad:false};
+  blocks.push(block);
+  el.addEventListener('mousedown',onBlockMousedown);
+  el.addEventListener('touchstart',onBlockTouchstart,{passive:false});
+  el.addEventListener('contextmenu',e=>{e.preventDefault();deleteBlock(e,id);});
+  return block;
+}
+
+/* ── make D-pad block ── */
+function makeDpadBlock(x,y){
+  const id=++idCounter;
+  const el=document.createElement('div');
+  el.className='dpad-block';
+  el.dataset.id=id;el.dataset.type='dpad';
+  el.style.left=x+'px';el.style.top=y+'px';
+  el.innerHTML=`
+    <div class="face">
+      <div class="dpad-cross">
+        <div class="dp-cell dp-blank"></div>
+        <div class="dp-cell dp-btn" id="dp-up-${id}" onmousedown="dpadPress(event,${id},'up')" ontouchstart="dpadPress(event,${id},'up')">▲</div>
+        <div class="dp-cell dp-blank"></div>
+        <div class="dp-cell dp-btn" id="dp-left-${id}" onmousedown="dpadPress(event,${id},'left')" ontouchstart="dpadPress(event,${id},'left')">◀</div>
+        <div class="dp-cell dp-center"></div>
+        <div class="dp-cell dp-btn" id="dp-right-${id}" onmousedown="dpadPress(event,${id},'right')" ontouchstart="dpadPress(event,${id},'right')">▶</div>
+        <div class="dp-cell dp-blank"></div>
+        <div class="dp-cell dp-btn" id="dp-down-${id}" onmousedown="dpadPress(event,${id},'down')" ontouchstart="dpadPress(event,${id},'down')">▼</div>
+        <div class="dp-cell dp-blank"></div>
+      </div>
+      <div class="dpad-instrument-label" id="dpad-label-${id}">CONNECT TO ACTIVATE</div>
+    </div>
+    <div class="slab"></div><div class="floor-shadow"></div>
+    <div class="delete-btn" onmousedown="deleteBlock(event,${id})" ontouchstart="deleteBlock(event,${id})">✕</div>`;
+  canvas.appendChild(el);
+  const block={id,type:'dpad',el,x,y,rightNeighbor:null,leftNeighbor:null,isDpad:true};
+  blocks.push(block);
+  el.addEventListener('mousedown',onDpadMousedown);
+  el.addEventListener('touchstart',onDpadTouchstart,{passive:false});
+  el.addEventListener('contextmenu',e=>{e.preventDefault();deleteBlock(e,id);});
+  return block;
+}
+
+/* ── JOYSTICK BLOCK ── */
+function makeDiscBlock(x,y){
+  const id=++idCounter;
+  const el=document.createElement('div');
+  el.className='disc-block';
+  el.dataset.id=id;el.dataset.type='disc';
+  el.style.left=x+'px';el.style.top=y+'px';
+  el.innerHTML=`
+    <div class="face">
+      <div class="joy-gate" id="joy-gate-${id}">
+        <div class="joy-cap" id="joy-cap-${id}"></div>
+      </div>
+      <div class="joy-bars">
+        <div class="joy-bar-row joy-bar-x">
+          <span class="joy-bar-lbl">CUT</span>
+          <div class="joy-bar-track"><div class="joy-bar-fill" id="jbx-${id}"></div></div>
+        </div>
+        <div class="joy-bar-row joy-bar-y">
+          <span class="joy-bar-lbl">RES</span>
+          <div class="joy-bar-track"><div class="joy-bar-fill" id="jby-${id}"></div></div>
+        </div>
+      </div>
+      <div class="joy-param-label" id="joy-lbl-${id}">CONNECT TO ACTIVATE</div>
+    </div>
+    <div class="dslab"></div>
+    <div class="floor-shadow"></div>
+    <div class="step-dot"></div>
+    <div class="delete-btn" onmousedown="deleteBlock(event,${id})" ontouchstart="deleteBlock(event,${id})">✕</div>`;
+  canvas.appendChild(el);
+  const block={id,type:'disc',el,x,y,rightNeighbor:null,leftNeighbor:null,isDpad:false,isDisc:true};
+  blocks.push(block);
+  el.addEventListener('mousedown',onBlockMousedown);
+  el.addEventListener('touchstart',onBlockTouchstart,{passive:false});
+  el.addEventListener('contextmenu',e=>{e.preventDefault();deleteBlock(e,id);});
+  setupJoystick(id);
+  return block;
+}
+
+function setupJoystick(id){
+  const gate=document.getElementById('joy-gate-'+id);
+  const cap =document.getElementById('joy-cap-'+id);
+  const barX=document.getElementById('jbx-'+id);
+  const barY=document.getElementById('jby-'+id);
+  const lbl =document.getElementById('joy-lbl-'+id);
+  if(!gate||!cap) return;
+
+  // Joystick state: normalised -1..1 each axis
+  let jx=0, jy=0;
+  let joyDown=false, startMX=0, startMY=0, capBaseX=0, capBaseY=0;
+
+  const MAX_TRAVEL=22; // px from center
+
+  function setJoyPos(nx,ny){
+    // Clamp to circular gate
+    const dist=Math.sqrt(nx*nx+ny*ny);
+    if(dist>MAX_TRAVEL){const s=MAX_TRAVEL/dist;nx*=s;ny*=s;}
+    jx=nx/MAX_TRAVEL; jy=ny/MAX_TRAVEL;
+    cap.style.transform=`translate(${nx}px,${ny}px)`;
+    // Update bar fills
+    if(barX) barX.style.width=(50+jx*50)+'%';
+    if(barY) barY.style.width=(50+jy*50)+'%';
+    applyJoyParams();
+  }
+
+  function applyJoyParams(){
+    const block=blockById(id);
+    if(!block||!isDiscConnected(block)) return;
+    // X axis → filter cutoff (log 80Hz–18kHz)
+    // Y axis → resonance Q (0.5–18), inverted so up=squeal
+    const cutoff=jxToCutoff(jx);
+    const q=jyToQ(jy);
+    setJoyFilter(cutoff, q);
+    // Update bars — X bar shows cutoff position, Y bar shows Q position
+    if(barX) barX.style.width=((jx+1)/2*100)+'%';
+    if(barY) barY.style.width=((-jy+1)/2*100)+'%';
+    // Live label
+    if(lbl){
+      const khz=cutoff>=1000?(cutoff/1000).toFixed(1)+'kHz':Math.round(cutoff)+'Hz';
+      const qv=q.toFixed(1);
+      lbl.textContent=`CUT ${khz}  RES ${qv}`;
+    }
+  }
+
+  function startJoy(cx,cy){
+    const block=blockById(id);
+    if(!block||!isDiscConnected(block)) return;
+    joyDown=true;
+    startMX=cx; startMY=cy;
+    // current cap offset
+    const m=cap.style.transform.match(/translate\(([-.\d]+)px,([-.\d]+)px\)/);
+    capBaseX=m?parseFloat(m[1]):0;
+    capBaseY=m?parseFloat(m[2]):0;
+    cap.classList.add('active');
+  }
+
+  function moveJoy(cx,cy){
+    if(!joyDown) return;
+    const dx=cx-startMX+capBaseX;
+    const dy=cy-startMY+capBaseY;
+    setJoyPos(dx,dy);
+  }
+
+  function endJoy(){
+    if(!joyDown) return;
+    joyDown=false;
+    cap.classList.remove('active');
+    // Spring back to center
+    const springBack=()=>{
+      jx*=0.82; jy*=0.82;
+      const nx=jx*MAX_TRAVEL, ny=jy*MAX_TRAVEL;
+      cap.style.transform=`translate(${nx}px,${ny}px)`;
+      if(barX) barX.style.width=(50+jx*50)+'%';
+      if(barY) barY.style.width=(50+jy*50)+'%';
+      if(Math.abs(jx)>0.01||Math.abs(jy)>0.01) requestAnimationFrame(springBack);
+      else{
+        jx=0;jy=0;
+        cap.style.transform='translate(0px,0px)';
+        if(barX) barX.style.width='50%';
+        if(barY) barY.style.width='50%';
+      }
+    };
+    requestAnimationFrame(springBack);
+  }
+
+  cap.addEventListener('mousedown',e=>{e.stopPropagation();e.preventDefault();startJoy(e.clientX,e.clientY);});
+  cap.addEventListener('touchstart',e=>{e.stopPropagation();e.preventDefault();startJoy(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
+  document.addEventListener('mousemove',e=>{if(joyDown)moveJoy(e.clientX,e.clientY);});
+  document.addEventListener('touchmove',e=>{if(joyDown)moveJoy(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
+  document.addEventListener('mouseup',()=>{if(joyDown)endJoy();});
+  document.addEventListener('touchend',()=>{if(joyDown)endJoy();});
+}
+
+function isDiscConnected(disc){
+  // Walk the full chain — if it contains any instrument block (not dpad, not disc), we're connected
+  const chainBlocks=getChainOf(disc);
+  return chainBlocks.some(b=>!b.isDisc&&!b.isDpad);
+}
+
+function checkDiscConnections(){
+  const discs=blocks.filter(b=>b.isDisc);
+  const anyConnected=discs.some(d=>isDiscConnected(d));
+  joystickConnected=anyConnected;
+  if(!anyConnected){
+    // Reset filter to fully open when disconnected
+    setJoyFilter(18000, 0.7);
+    // Reset all joystick visuals
+    discs.forEach(d=>{
+      const barX=document.getElementById('jbx-'+d.id);
+      const barY=document.getElementById('jby-'+d.id);
+      if(barX) barX.style.width='50%';
+      if(barY) barY.style.width='0%';
+    });
+  }
+  discs.forEach(d=>{
+    const connected=isDiscConnected(d);
+    d.el.classList.toggle('connected',connected);
+    d.el.classList.toggle('playing',isPlaying&&connected);
+    const lbl=document.getElementById('joy-lbl-'+d.id);
+    if(lbl&&!connected) lbl.textContent='CONNECT TO ACTIVATE';
+    else if(lbl&&connected){
+      const khz=joyFilterCutoff>=1000?(joyFilterCutoff/1000).toFixed(1)+'kHz':Math.round(joyFilterCutoff)+'Hz';
+      lbl.textContent=`CUT ${khz}  RES ${joyFilterQ.toFixed(1)}`;
+    }
+  });
+}
+
+/* ══════════════════════════════
+   DELETE
+══════════════════════════════ */
+function deleteBlock(e,id){
+  e.stopPropagation();e.preventDefault();
+  const block=blockById(id);
+  if(!block) return;
+
+  // poof animation at block center
+  const rect=block.el.getBoundingClientRect();
+  const poof=document.createElement('div');
+  poof.className='delete-poof';
+  poof.textContent='💨';
+  poof.style.left=(rect.left+rect.width/2-14)+'px';
+  poof.style.top=(rect.top+rect.height/2-14)+'px';
+  document.body.appendChild(poof);
+  poof.addEventListener('animationend',()=>poof.remove(),{once:true});
+
+  // detach neighbors
+  if(block.leftNeighbor){const l=blockById(block.leftNeighbor);if(l)l.rightNeighbor=null;}
+  if(block.rightNeighbor){const r=blockById(block.rightNeighbor);if(r)r.leftNeighbor=null;}
+
+  // remove from DOM and array
+  block.el.style.transition='opacity .2s,transform .2s';
+  block.el.style.opacity='0';
+  block.el.style.transform='scale(0.5)';
+  setTimeout(()=>{block.el.remove();},200);
+  blocks=blocks.filter(b=>b.id!==id);
+
+  rebuildChains();
+  renderConnectors();
+  checkDpadConnections();
+  updatePlaybackMuting();
+}
+
+/* ══════════════════════════════
+   D-PAD
+══════════════════════════════ */
+function dpadPress(e,id,dir){
+  e.stopPropagation();e.preventDefault();
+  const block=blockById(id);
+  if(!block||!isDpadConnected(block)) return;
+  const btn=document.getElementById(`dp-${dir}-${id}`);
+  if(btn){btn.classList.add('pressed');setTimeout(()=>btn.classList.remove('pressed'),150);}
+  if(dir==='up')cycleInstrument(1);
+  if(dir==='down')cycleInstrument(-1);
+}
+function isDpadConnected(dp){
+  // Walk the full chain — if it contains any instrument block, dpad is active
+  const chainBlocks=getChainOf(dp);
+  return chainBlocks.some(b=>!b.isDpad&&!b.isDisc);
+}
+function cycleInstrument(dir){
+  const idx=INSTRUMENTS.indexOf(currentInstrument);
+  currentInstrument=INSTRUMENTS[(idx+dir+INSTRUMENTS.length)%INSTRUMENTS.length];
+  applyInstrumentToAll();
+  showToast(`${INSTRUMENT_ICONS[currentInstrument]}  ${currentInstrument.toUpperCase()}`);
+  flashScreen(currentInstrument);
+}
+function applyInstrumentToAll(){
+  const inst=currentInstrument,isDrums=inst==='drums';
+  const drumColors={kick:['#c0392b','#922b21','#7b241c','#6e1f19'],snare:['#e67e22','#ca6f1e','#a04000','#873600'],hihat:['#1abc9c','#148f77','#0e6655','#0b5345'],bass:['#2980b9','#1a6fa8','#154360','#123756']};
+  blocks.forEach(b=>{
+    if(b.isDpad||b.isDisc) return; // skip non-instrument blocks
+    const face=b.el.querySelector('.face');
+    const bn=document.getElementById('bn-'+b.id);
+    const mb=document.getElementById('mb-'+b.id);
+    const slab=b.el.querySelector('.slab');
+    if(!face||!bn) return; // guard against missing elements
+    if(isDrums){
+      const dc=drumColors[b.type];
+      if(dc){
+        face.style.background=`linear-gradient(145deg,${dc[0]},${dc[1]},${dc[2]})`;
+        if(slab) slab.style.background=dc[3];
+      }
+      bn.textContent=b.type.toUpperCase();
+      if(mb){mb.textContent='';} b.el.classList.remove('mode-active');
+    }else{
+      const colors=INSTRUMENT_COLORS[inst];
+      if(!colors) return;
+      const rc={kick:colors.r,snare:colors.g,hihat:colors.b,bass:colors.k};
+      const bc=rc[b.type]||'#555';
+      face.style.background=`linear-gradient(145deg,${bc},${bc}cc,${bc}88)`;
+      if(slab) slab.style.background=bc+'66';
+      bn.textContent={kick:'ROOT',snare:'3RD',hihat:'5TH',bass:'BASS'}[b.type]||b.type.toUpperCase();
+      if(mb){mb.textContent=INSTRUMENT_ICONS[inst];} b.el.classList.add('mode-active');
+    }
+    face.style.transition='background .4s';
+    setTimeout(()=>{if(face) face.style.transition='';},500);
+  });
+  // Update dpad labels
+  blocks.forEach(b=>{
+    if(!b.isDpad) return;
+    const lbl=document.getElementById('dpad-label-'+b.id);if(!lbl) return;
+    lbl.textContent=isDpadConnected(b)?`${INSTRUMENT_ICONS[inst]} ${inst.toUpperCase()}`:'CONNECT TO ACTIVATE';
+  });
+}
+function checkDpadConnections(){
+  const dpads=blocks.filter(b=>b.isDpad);
+  const anyConnected=dpads.some(d=>isDpadConnected(d));
+  if(!anyConnected&&currentInstrument!=='drums'){currentInstrument='drums';applyInstrumentToAll();showToast('🥁  DRUMS');}
+  dpads.forEach(d=>{
+    const lbl=document.getElementById('dpad-label-'+d.id);if(!lbl) return;
+    const connected=isDpadConnected(d);
+    d.el.classList.toggle('connected',connected);
+    lbl.textContent=connected?`${INSTRUMENT_ICONS[currentInstrument]} ${currentInstrument.toUpperCase()}`:'CONNECT TO ACTIVATE';
+  });
+}
+
+/* ══════════════════════════════
+   PLAYBACK MUTING
+   — solo connected blocks during play
+══════════════════════════════ */
+function updatePlaybackMuting(){
+  if(!isPlaying){
+    blocks.forEach(b=>{b.el.classList.remove('muted','solo-active');});
+    return;
+  }
+  // Blocks in connected chains (2+ playable)
+  const connectedIds=new Set();
+  chains.forEach(ch=>{
+    const playable=ch.filter(id=>{const b=blockById(id);return b&&!b.isDpad&&!b.isDisc;});
+    if(playable.length>1) playable.forEach(id=>connectedIds.add(id));
+  });
+  // Blocks mounted on any mat are always active during playback
+  const matIds=new Set();
+  mats.forEach(mat=>{
+    [...mat.mountedBlocks].forEach(id=>{
+      const b=blockById(id);
+      if(b&&!b.isDpad&&!b.isDisc) matIds.add(id);
+    });
+  });
+  blocks.forEach(b=>{
+    if(b.isDpad||b.isDisc) return;
+    if(matIds.has(b.id)||connectedIds.has(b.id)){
+      b.el.classList.remove('muted');
+      b.el.classList.add('solo-active');
+    } else {
+      b.el.classList.add('muted');
+      b.el.classList.remove('solo-active');
+    }
+  });
+}
+
+/* ══════════════════════════════
+   DRAG
+══════════════════════════════ */
+let dragging=null,dragOffX=0,dragOffY=0,didMove=false,startCX=0,startCY=0;
+let dragGroup=[];  // [{block, offX, offY}] offsets relative to grabbed block
+
+/* ── STRUM ENGINE ── */
+// Tracks drag velocity/direction to detect strum gestures on guitar blocks
+let strumHistory=[];       // recent {x,y,t} positions
+let strumLastDir=0;        // last dominant direction: -1=up/left, 1=down/right, 0=none
+let strumCooldown=0;       // timestamp of last individual string trigger
+let strumStringIndex=0;    // which string in the chord is next
+let strumChordFreqs=[];    // current chord frequencies for active strum
+let strumDirection=1;      // 1=downstroke, -1=upstroke
+const STRUM_FREQS={
+  kick: [196.00,246.94,293.66,329.63,392.00,493.88],  // G chord — all 6 strings low→high
+  snare:[220.00,277.18,329.63,369.99,440.00,554.37],   // A chord
+  hihat:[261.63,329.63,392.00,440.00,523.25,659.26],   // C chord
+  bass: [98.00,123.47,146.83,196.00,246.94,293.66]     // G bass chord
+};
+
+function strumPickString(freq, vol, isDownstroke){
+  // Slight volume variation per string — like uneven pick pressure
+  const v = vol * (0.75 + Math.random()*0.25);
+  playNote('guitar', freq, v);
+  waveHit();
+  // Visual: strum ripple line at the current string's vertical position
+  if(dragging){
+    const face = dragging.el.querySelector('.face');
+    if(face){
+      const rip = document.createElement('div');
+      rip.className = 'strum-ripple';
+      // Position the line roughly where the "string" would be
+      // 6 strings mapped across the block vertically
+      const allFreqs = strumChordFreqs.length || 6;
+      const idx = isDownstroke ? strumStringIndex-1 : strumStringIndex+1;
+      const pct = 15 + (Math.max(0,Math.min(idx,allFreqs-1))/(allFreqs-1)) * 70;
+      rip.style.top = pct + '%';
+      face.appendChild(rip);
+      rip.addEventListener('animationend',()=>rip.remove(),{once:true});
+    }
+  }
+}
+
+function processStrum(cx, cy, now){
+  if(!dragging || dragging.isDpad || currentInstrument!=='guitar') return;
+
+  strumHistory.push({x:cx, y:cy, t:now});
+  // Keep only last 80ms of history
+  strumHistory = strumHistory.filter(p=>now-p.t < 80);
+  if(strumHistory.length < 3) return;
+
+  const oldest = strumHistory[0];
+  const dx = cx - oldest.x;
+  const dy = cy - oldest.y;
+  // Use whichever axis has more movement
+  const primaryDelta = Math.abs(dy) > Math.abs(dx)*0.5 ? dy : dx;
+  const speed = Math.sqrt(dx*dx + dy*dy) / Math.max(1, now - oldest.t); // px/ms
+
+  // Need decent speed to trigger — prevents accidental picks
+  if(speed < 0.55) {
+    strumLastDir = 0;
+    return;
+  }
+
+  const dir = primaryDelta > 0 ? 1 : -1;
+
+  // Detect direction change = new stroke begins
+  if(strumLastDir !== 0 && dir !== strumLastDir){
+    // Stroke reversal — reset string index, flip direction
+    strumStringIndex = dir === 1 ? 0 : 5; // downstroke starts low, upstroke starts high
+    strumDirection = dir;
+  }
+  strumLastDir = dir;
+
+  // Init chord if not set
+  if(strumChordFreqs.length === 0 || strumDirection !== dir){
+    strumChordFreqs = STRUM_FREQS[dragging.type] || STRUM_FREQS.kick;
+    strumDirection = dir;
+    strumStringIndex = dir === 1 ? 0 : strumChordFreqs.length-1;
+  }
+
+  // Spacing between strings depends on speed — faster = tighter strum
+  const stringSpacing = Math.max(18, 80 - speed * 30); // ms between strings
+
+  if(now - strumCooldown < stringSpacing) return;
+  strumCooldown = now;
+
+  // Pick current string
+  const idx = Math.max(0, Math.min(strumStringIndex, strumChordFreqs.length-1));
+  const freq = strumChordFreqs[idx];
+  const vol = Math.min(1.2, 0.5 + speed * 0.5); // louder when moving faster
+  strumPickString(freq, vol, dir===1);
+
+  // Advance to next string
+  strumStringIndex += dir; // downstroke goes up in index, upstroke goes down
+
+  // Clamp — if we've passed all strings, stop until next direction change
+  if(strumStringIndex < 0 || strumStringIndex >= strumChordFreqs.length){
+    strumStringIndex = dir===1 ? strumChordFreqs.length : -1; // park out of range
+  }
+}
+
+function onBlockMousedown(e){
+  if(e.button!==0||e.target.closest('.delete-btn')) return;
+  e.preventDefault();e.stopPropagation();
+  beginDrag(e.currentTarget,e.clientX,e.clientY);
+}
+function onBlockTouchstart(e){
+  if(e.target.closest('.delete-btn')) return;
+  e.preventDefault();e.stopPropagation();
+  beginDrag(e.currentTarget,e.touches[0].clientX,e.touches[0].clientY);
+}
+function onDpadMousedown(e){
+  if(e.target.closest('.dp-btn,.delete-btn')) return;
+  if(e.button!==0) return;e.preventDefault();e.stopPropagation();
+  beginDrag(e.currentTarget,e.clientX,e.clientY);
+}
+function onDpadTouchstart(e){
+  if(e.target.closest('.dp-btn,.delete-btn')) return;
+  e.preventDefault();e.stopPropagation();
+  beginDrag(e.currentTarget,e.touches[0].clientX,e.touches[0].clientY);
+}
+
+function getChainOf(block){
+  // Walk to leftmost, then collect all ids rightward
+  let cur=block;
+  while(cur.leftNeighbor&&blockById(cur.leftNeighbor)) cur=blockById(cur.leftNeighbor);
+  const chain=[];
+  while(cur){ chain.push(cur.id); cur=cur.rightNeighbor?blockById(cur.rightNeighbor):null; }
+  return chain.map(id=>blockById(id)).filter(Boolean);
+}
+
+function beginDrag(el,cx,cy){
+  const block=blockById(parseInt(el.dataset.id));if(!block) return;
+  dragging=block;didMove=false;startCX=cx;startCY=cy;
+  const rect=el.getBoundingClientRect();
+  // Store offset in screen px — screenToWorld subtracts panX/Y and divides by zoom
+  // So we store the raw screen offset and apply zoom when converting
+  dragOffX=(cx-rect.left)/zoom;
+  dragOffY=(cy-rect.top)/zoom;
+
+  // Build group — all blocks in the same chain, storing their offset from grabbed block
+  const chainBlocks=getChainOf(block);
+  if(chainBlocks.length>1){
+    dragGroup=chainBlocks.map(b=>({block:b, offX:b.x-block.x, offY:b.y-block.y}));
+  } else {
+    dragGroup=[]; // solo block — no group
+  }
+
+  // Mark all group members
+  dragGroup.forEach(g=>{ g.block.el.classList.add('dragging'); g.block.el.style.zIndex=490; });
+  el.classList.add('dragging');el.style.zIndex=500;
+
+  // Reset strum state for fresh drag
+  strumHistory=[];strumLastDir=0;strumCooldown=0;strumStringIndex=0;strumChordFreqs=[];
+}
+document.addEventListener('mousemove',e=>{if(dragging)moveDrag(e.clientX,e.clientY);});
+document.addEventListener('mouseup',  e=>{if(dragging)endDrag(e.clientX,e.clientY);});
+document.addEventListener('touchmove',e=>{if(dragging){e.preventDefault();moveDrag(e.touches[0].clientX,e.touches[0].clientY);}},{passive:false});
+document.addEventListener('touchend', e=>{if(dragging)endDrag(e.changedTouches[0].clientX,e.changedTouches[0].clientY);});
+
+function getW(b){return b.isDpad?DPAD_W:b.isDisc?140:BLOCK_W;}
+function getH(b){return b.isDpad?DPAD_H:b.isDisc?140:BLOCK_H;}
+
+function moveDrag(cx,cy){
+  const now = performance.now();
+  if(Math.abs(cx-startCX)>4||Math.abs(cy-startCY)>4){
+    if(!didMove){
+      // On first real movement: if solo block NOT on a mat, detach from chain
+      if(dragGroup.length<=1 && !dragging.matId) detachBlock(dragging);
+      // Groups keep their connections — they all move as one
+      // Mat-mounted blocks: never detach, just reposition freely
+    }
+    didMove=true;
+  }
+  if(!didMove) return;
+  const wp=screenToWorld(cx,cy);
+  let nx=Math.max(0,Math.min(wp.x-dragOffX, 3000-getW(dragging)));
+  let ny=Math.max(0,Math.min(wp.y-dragOffY, 3000-getH(dragging)));
+  // If on a mat, clamp movement to stay inside the mat bounds
+  if(dragging.matId!=null){
+    const mat=matById(dragging.matId);
+    if(mat){
+      nx=Math.max(mat.x+4, Math.min(nx, mat.x+mat.w-BLOCK_W-4));
+      ny=Math.max(mat.y+4, Math.min(ny, mat.y+mat.h-BLOCK_H-4));
+    }
+  }
+  setBlockPos(dragging,nx,ny);
+  // Update mat offset so the block stays correctly anchored if mat is dragged later
+  if(dragging.matId!=null){
+    const mat=matById(dragging.matId);
+    if(mat){ dragging.matOffX=nx-mat.x; dragging.matOffY=ny-mat.y; }
+  }
+  // Move all group members relative to the grabbed block
+  dragGroup.forEach(g=>{
+    if(g.block.id===dragging.id) return;
+    setBlockPos(g.block, nx+g.offX, ny+g.offY);
+  });
+  if(dragGroup.length<=1) highlightSnapTargets();
+  if(!dragging.matId) highlightInsertConnector();
+  renderConnectors();
+  if(dragging.matId) { updateProximity(); renderProxLines(); }
+  processStrum(cx, cy, now);
+}
+function endDrag(cx,cy){
+  const b=dragging;
+  // Clean up group dragging classes
+  dragGroup.forEach(g=>{ g.block.el.classList.remove('dragging'); g.block.el.style.zIndex=''; });
+  b.el.classList.remove('dragging');b.el.style.zIndex='';
+  blocks.forEach(o=>o.el.classList.remove('snap-target'));
+
+  if(!didMove){
+    // Pure tap — play sound, keep chain intact
+    if(!b.isDpad) triggerBlock(b,false);
+    dragging=null; dragGroup=[];
+    return;
+  }
+
+  // Group drag: no snap needed — chain stays connected, just settle positions
+  if(dragGroup.length>1){
+    dragging=null; dragGroup=[];
+    rebuildChains();renderConnectors();
+    updatePlaybackMuting();
+    // Check if any group blocks landed on a mat
+    dragGroup.forEach(g=>checkBlockOnMat(g.block));
+    return;
+  }
+
+  // Solo drag: check mat mounting first, then try chain snap
+  checkBlockOnMat(b);
+  // Don't snap to a chain if the block is on a mat — it moves freely there
+  if(!b.matId){
+    trySnap(b);
+  }
+  dragging=null; dragGroup=[];
+  rebuildChains();renderConnectors();
+  updatePlaybackMuting();
+  updateProximity();renderProxLines();
+}
+function setBlockPos(b,x,y){b.x=x;b.y=y;b.el.style.left=x+'px';b.el.style.top=y+'px';}
+
+/* ══════════════════════════════
+   CHAIN / SNAP
+══════════════════════════════ */
+function detachBlock(block){
+  if(block.leftNeighbor){const l=blockById(block.leftNeighbor);if(l)l.rightNeighbor=null;}
+  if(block.rightNeighbor){const r=blockById(block.rightNeighbor);if(r)r.leftNeighbor=null;}
+  block.leftNeighbor=null;block.rightNeighbor=null;
+  if(block.isDpad)setTimeout(checkDpadConnections,50);
+  if(block.isDisc)setTimeout(checkDiscConnections,50);
+  rebuildChains();renderConnectors();
+}
+
+function canSnapTogether(a,b){
+  if(a.id===b.id) return false;
+  if(a.isDpad&&b.isDpad) return false;
+  if(a.isDisc&&b.isDisc) return false;
+  return true;
+}
+
+function trySnap(dragged){
+  let best=null, bestDist=SNAP_DIST, bestSide=null, bestInsertRight=null;
+  const dw=getW(dragged);
+
+  blocks.forEach(other=>{
+    if(!canSnapTogether(dragged,other)) return;
+
+    // ── End-snap: right end of other (other has no right neighbor) ──
+    if(!other.rightNeighbor&&!dragged.leftNeighbor){
+      const tx=other.x+getW(other)+GAP, ty=other.y+(getH(other)-getH(dragged))/2;
+      const dist=Math.hypot(dragged.x-tx,dragged.y-ty);
+      if(dist<bestDist){bestDist=dist;best=other;bestSide='right';bestInsertRight=null;}
+    }
+
+    // ── End-snap: left end of other (other has no left neighbor) ──
+    if(!other.leftNeighbor&&!dragged.rightNeighbor){
+      const tx=other.x-dw-GAP, ty=other.y+(getH(other)-getH(dragged))/2;
+      const dist=Math.hypot(dragged.x-tx,dragged.y-ty);
+      if(dist<bestDist){bestDist=dist;best=other;bestSide='left';bestInsertRight=null;}
+    }
+
+    // ── Insert-snap: slot in BETWEEN other and its right neighbor ──
+    if(other.rightNeighbor){
+      const rightBlock=blockById(other.rightNeighbor);
+      if(rightBlock&&canSnapTogether(dragged,other)&&canSnapTogether(dragged,rightBlock)){
+        // Target position: right of other
+        const tx=other.x+getW(other)+GAP, ty=other.y+(getH(other)-getH(dragged))/2;
+        const dist=Math.hypot(dragged.x-tx,dragged.y-ty);
+        if(dist<bestDist){bestDist=dist;best=other;bestSide='insert';bestInsertRight=rightBlock;}
+      }
+    }
+  });
+
+  if(!best) return false;
+
+  if(bestSide==='insert'&&bestInsertRight){
+    // ── INSERTION: slot dragged between best and bestInsertRight ──
+    const tx=best.x+getW(best)+GAP;
+    const ty=best.y+(getH(best)-getH(dragged))/2;
+    // Shift the right portion of the chain to make room
+    const shiftAmt=getW(dragged)+GAP;
+    shiftChainFrom(bestInsertRight,shiftAmt);
+    animateTo(dragged,tx,ty,()=>{
+      // Splice: best → dragged → bestInsertRight
+      best.rightNeighbor=dragged.id;
+      dragged.leftNeighbor=best.id;
+      dragged.rightNeighbor=bestInsertRight.id;
+      bestInsertRight.leftNeighbor=dragged.id;
+      snapFeedback(dragged,best);
+      snapFeedback(dragged,bestInsertRight);
+      rebuildChains();renderConnectors();checkDpadConnections();checkDiscConnections();updatePlaybackMuting();
+    });
+  } else {
+    // ── END-SNAP: attach to open end ──
+    const tx=bestSide==='right'?best.x+getW(best)+GAP:best.x-dw-GAP;
+    const ty=best.y+(getH(best)-getH(dragged))/2;
+    animateTo(dragged,tx,ty,()=>{
+      if(bestSide==='right'){best.rightNeighbor=dragged.id;dragged.leftNeighbor=best.id;}
+      else{best.leftNeighbor=dragged.id;dragged.rightNeighbor=best.id;}
+      snapFeedback(dragged,best);
+      rebuildChains();renderConnectors();checkDpadConnections();checkDiscConnections();updatePlaybackMuting();
+    });
+  }
+  return true;
+}
+
+// Shift a block and everything to its right by shiftAmt pixels
+function shiftChainFrom(block,shiftAmt){
+  let cur=block;
+  while(cur){
+    animateTo(cur,cur.x+shiftAmt,cur.y,null);
+    cur=cur.rightNeighbor?blockById(cur.rightNeighbor):null;
+  }
+}
+
+function animateTo(block,tx,ty,cb){
+  const sx=block.x,sy=block.y,dx=tx-sx,dy=ty-sy,dur=200,t0=performance.now();
+  function step(now){
+    const p=Math.min(1,(now-t0)/dur),e=1-Math.pow(1-p,3);
+    setBlockPos(block,sx+dx*e,sy+dy*e);renderConnectors();
+    if(p<1)requestAnimationFrame(step);
+    else{setBlockPos(block,tx,ty);if(cb)cb();}
+  }
+  requestAnimationFrame(step);
+}
+
+function snapFeedback(a,b){
+  [a,b].forEach(bl=>{const f=bl.el.querySelector('.face');if(!f)return;f.style.transition='filter .1s';f.style.filter='brightness(1.5)';setTimeout(()=>{if(f)f.style.filter='';},160);});
+}
+
+function highlightSnapTargets(){
+  if(!dragging) return;
+  const dw=getW(dragging);
+  blocks.forEach(other=>{
+    if(other.id===dragging.id){other.el.classList.remove('snap-target');return;}
+    if(!canSnapTogether(dragging,other)){other.el.classList.remove('snap-target');return;}
+    let close=false;
+    // End snap targets
+    if(!other.rightNeighbor&&!dragging.leftNeighbor){
+      const tx=other.x+getW(other)+GAP;
+      if(Math.hypot(dragging.x-tx,dragging.y-other.y)<SNAP_DIST) close=true;
+    }
+    if(!other.leftNeighbor&&!dragging.rightNeighbor){
+      const tx=other.x-dw-GAP;
+      if(Math.hypot(dragging.x-tx,dragging.y-other.y)<SNAP_DIST) close=true;
+    }
+    // Insert snap target (between other and its right neighbor)
+    if(!close&&other.rightNeighbor){
+      const rightBlock=blockById(other.rightNeighbor);
+      if(rightBlock&&canSnapTogether(dragging,rightBlock)){
+        const tx=other.x+getW(other)+GAP;
+        if(Math.hypot(dragging.x-tx,dragging.y-other.y)<SNAP_DIST) close=true;
+      }
+    }
+    other.el.classList.toggle('snap-target',close);
+  });
+}
+
+function highlightInsertConnector(){
+  // Clear all existing insert-preview marks
+  document.querySelectorAll('.connector.insert-preview').forEach(c=>c.classList.remove('insert-preview'));
+  if(!dragging||dragGroup.length>1) return;
+  const dw=getW(dragging);
+  // Find the best insertion gap and mark that connector
+  let bestDist=SNAP_DIST, bestLeft=null;
+  blocks.forEach(other=>{
+    if(!other.rightNeighbor||!canSnapTogether(dragging,other)) return;
+    const rightBlock=blockById(other.rightNeighbor);
+    if(!rightBlock||!canSnapTogether(dragging,rightBlock)) return;
+    const tx=other.x+getW(other)+GAP;
+    const dist=Math.hypot(dragging.x-tx,dragging.y-other.y);
+    if(dist<bestDist){bestDist=dist;bestLeft=other;}
+  });
+  if(!bestLeft) return;
+  // Find the DOM connector element that belongs to bestLeft→right
+  document.querySelectorAll('.connector').forEach(con=>{
+    // Connectors are positioned at bestLeft.x+getW(bestLeft)
+    const conLeft=parseFloat(con.style.left);
+    if(Math.abs(conLeft-(bestLeft.x+getW(bestLeft)-1))<4) con.classList.add('insert-preview');
+  });
+}
+function renderConnectors(){
+  document.querySelectorAll('.connector').forEach(c=>c.remove());
+  blocks.forEach(b=>{
+    if(!b.rightNeighbor) return;
+    const r=blockById(b.rightNeighbor);if(!r) return;
+    const isDpadLink=b.isDpad||r.isDpad;
+    const isDiscLink=b.isDisc||r.isDisc;
+    const con=document.createElement('div');
+    con.className='connector'+(isDiscLink?' disc-con':isDpadLink?' dpad-con':'')+(isPlaying?' playing':'');
+    const left=b.x+getW(b)-1;
+    const width=Math.max(GAP,r.x-(b.x+getW(b))+2);
+    const ch=getH(b);
+    con.style.cssText=`left:${left}px;top:${b.y+(ch-48)/2}px;width:${width}px;`;
+    con.innerHTML='<div class="con-outer"><div class="con-inner"></div></div>';
+    canvas.appendChild(con);
+  });
+}
+
+/* ══════════════════════════════
+   CHAINS
+══════════════════════════════ */
+let chains=[];
+function rebuildChains(){
+  chains=[];const visited=new Set();
+  blocks.forEach(b=>{
+    if(visited.has(b.id)) return;
+    let cur=b;
+    while(cur.leftNeighbor&&blockById(cur.leftNeighbor)&&!visited.has(cur.leftNeighbor))cur=blockById(cur.leftNeighbor);
+    const chain=[];
+    while(cur){if(visited.has(cur.id))break;visited.add(cur.id);chain.push(cur.id);cur=cur.rightNeighbor?blockById(cur.rightNeighbor):null;}
+    if(chain.length>0)chains.push(chain);
+  });
+  blocks.forEach(b=>{
+    const inChain=chains.some(ch=>ch.length>1&&ch.includes(b.id));
+    b.el.classList.toggle('in-chain',inChain&&!b.isDpad); // disc gets in-chain glow too
+  });
+  checkDiscConnections();
+  if(isPlaying)restartLoop();
+}
+
+/* ══════════════════════════════
+   TRIGGER
+══════════════════════════════ */
+const emojis={kick:'💥',snare:'🥁',hihat:'✨',bass:'〰️'};
+const instEmojis={drums:'🥁',piano:'🎹',strings:'🎻',horns:'🎺',guitar:'🎸'};
+
+function triggerBlock(block,fromLoop){
+  if(block.isDpad||block.isDisc) return;
+  const snd=INSTRUMENT_SOUNDS[currentInstrument][block.type];
+  if(snd) snd();
+  block.el.classList.remove('hit');void block.el.offsetWidth;block.el.classList.add('hit');
+  setTimeout(()=>block.el.classList.remove('hit'),180);
+  const rip=document.createElement('div');rip.className='ripple';
+  block.el.querySelector('.face').appendChild(rip);
+  rip.addEventListener('animationend',()=>rip.remove(),{once:true});
+  if(!fromLoop){
+    const rect=block.el.getBoundingClientRect();
+    const pop=document.createElement('div');pop.className='note-pop';
+    pop.textContent=currentInstrument==='drums'?emojis[block.type]:instEmojis[currentInstrument];
+    pop.style.left=(rect.left+rect.width/2-10+(Math.random()-.5)*20)+'px';
+    pop.style.top=(rect.top+10)+'px';
+    document.body.appendChild(pop);
+    pop.addEventListener('animationend',()=>pop.remove(),{once:true});
+  }
+}
+
+/* ══════════════════════════════
+   LOOP — only connected chains play
+══════════════════════════════ */
+let isPlaying=false,loopTimer=null,chainSteps={};
+let bpm=120;
+document.getElementById('bpm-slider').addEventListener('input',function(){
+  bpm=parseInt(this.value);document.getElementById('bpm-val').textContent=bpm;
+  if(isPlaying)restartLoop();
+});
+
+function togglePlay(){
+  isPlaying=!isPlaying;
+  const btn=document.getElementById('play-btn');
+  if(isPlaying){
+    btn.textContent='■ STOP';btn.classList.add('playing');
+    chainSteps={};startLoop();
+    updatePlaybackMuting();
+    updateDiscSpinState();
+  }else{
+    btn.textContent='▶ PLAY';btn.classList.remove('playing');
+    stopLoop();
+    blocks.forEach(b=>{if(!b.isDpad&&!b.isDisc){b.el.querySelector('.step-dot').classList.remove('active');b.el.classList.remove('muted','solo-active');}});
+    updateDiscSpinState();
+    renderConnectors();
+  }
+}
+
+function updateDiscSpinState(){
+  blocks.filter(b=>b.isDisc).forEach(d=>{
+    const connected=isDiscConnected(d);
+    d.el.classList.toggle('playing', isPlaying && connected);
+  });
+}
+// joystick has no spinning vinyl — updateDiscSpinState is kept for future use
+function stopLoop(){if(loopTimer){clearTimeout(loopTimer);loopTimer=null;}}
+function restartLoop(){stopLoop();chainSteps={};if(isPlaying){startLoop();updatePlaybackMuting();}}
+function startLoop(){stopLoop();tick();}
+
+function tick(){
+  if(!isPlaying) return;
+  const interval=(60/bpm)*500;
+
+  // ── Play connected chains ──
+  chains.forEach((chain,ci)=>{
+    const playChain=chain.filter(id=>{const b=blockById(id);return b&&!b.isDpad&&!b.isDisc;});
+    if(playChain.length<2) return;
+    if(chainSteps[ci]===undefined)chainSteps[ci]=0;
+    const stepIdx=chainSteps[ci]%playChain.length;
+    const bid=playChain[stepIdx];
+    const block=blockById(bid);
+    if(block){
+      triggerBlock(block,true);
+      playChain.forEach(id=>{const bl=blockById(id);if(bl)bl.el.querySelector('.step-dot').classList.remove('active');});
+      block.el.querySelector('.step-dot').classList.add('active');
+    }
+    chainSteps[ci]=(stepIdx+1)%playChain.length;
+  });
+
+  // ── Play mat-mounted blocks (each mat = its own round-robin sequencer) ──
+  mats.forEach((mat,mi)=>{
+    const matBlocks=[...mat.mountedBlocks]
+      .map(id=>blockById(id))
+      .filter(b=>b&&!b.isDpad&&!b.isDisc);
+    if(matBlocks.length===0) return;
+    const matKey='mat_'+mat.id;
+    if(chainSteps[matKey]===undefined) chainSteps[matKey]=0;
+    const stepIdx=chainSteps[matKey]%matBlocks.length;
+    const block=matBlocks[stepIdx];
+    if(block){
+      triggerBlock(block,true);
+      matBlocks.forEach(b=>b.el.querySelector('.step-dot').classList.remove('active'));
+      block.el.querySelector('.step-dot').classList.add('active');
+    }
+    chainSteps[matKey]=(stepIdx+1)%matBlocks.length;
+  });
+
+  renderConnectors();
+  loopTimer=setTimeout(tick,interval);
+}
+
+/* ══════════════════════════════
+   TOAST / FLASH
+══════════════════════════════ */
+function showToast(msg){
+  const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._timer);t._timer=setTimeout(()=>t.classList.remove('show'),1800);
+}
+function flashScreen(inst){
+  const colors={drums:'rgba(200,50,50,.2)',piano:'rgba(150,50,200,.2)',strings:'rgba(30,180,80,.2)',horns:'rgba(200,150,20,.2)',guitar:'rgba(220,50,30,.2)'};
+  const fl=document.createElement('div');fl.className='inst-flash';fl.style.background=colors[inst]||'rgba(255,255,255,.1)';
+  document.body.appendChild(fl);fl.addEventListener('animationend',()=>fl.remove(),{once:true});
+}
+
+/* ══════════════════════════════
+   PROXIMITY MAT SYSTEM
+══════════════════════════════ */
+let mats=[];   // array of {id, el, x, y, w, h, mountedBlocks: Set of block ids}
+let matIdCounter=0;
+// Global pitch-shift state driven by proximity
+let proximityPitchShift=0; // semitones, -12..+12
+
+function makeMatBlock(x,y,w,h){
+  const id=++matIdCounter;
+  const el=document.createElement('div');
+  el.className='mat-block';
+  el.dataset.matId=id;
+  el.style.left=x+'px'; el.style.top=y+'px';
+  el.style.width=w+'px'; el.style.height=h+'px';
+  el.innerHTML=`
+    <div class="mat-face">
+      <div class="mat-title">PROXIMITY MAT</div>
+      <div class="mat-label">drop blocks · drag to tune · closer = higher pitch</div>
+      <div class="mat-freq" id="mat-freq-${id}"></div>
+    </div>
+    <div class="mat-resize" id="mat-resize-${id}"></div>
+    <div class="mat-delete" onclick="deleteMat(${id})">✕</div>`;
+  canvas.appendChild(el);
+  const mat={id,el,x,y,w,h,mountedBlocks:new Set()};
+  mats.push(mat);
+  setupMatDrag(mat);
+  setupMatResize(mat);
+  return mat;
+}
+
+function matById(id){return mats.find(m=>m.id===id)||null;}
+
+function deleteMat(id){
+  const mat=matById(id);
+  if(!mat) return;
+  // Eject all mounted blocks back to free-floating
+  [...mat.mountedBlocks].forEach(bid=>{
+    const b=blockById(bid);
+    if(b){
+      b.el.classList.remove('on-mat');
+      b.matId=null;
+      canvas.appendChild(b.el); // re-parent to canvas (in case it moved)
+    }
+  });
+  mat.el.style.transition='opacity .2s,transform .2s';
+  mat.el.style.opacity='0'; mat.el.style.transform='scale(0.5)';
+  setTimeout(()=>mat.el.remove(),200);
+  mats=mats.filter(m=>m.id!==id);
+  updateProximity();
+  renderProxLines();
+}
+
+// ── Mat dragging ──
+function setupMatDrag(mat){
+  let mdown=false,mox=0,moy=0;
+  mat.el.addEventListener('mousedown',e=>{
+    if(e.target.closest('.mat-delete,.mat-resize')) return;
+    // Don't drag mat if clicking on a mounted block
+    if(e.target.closest('.drum-block,.dpad-block,.disc-block')) return;
+    e.preventDefault();e.stopPropagation();
+    mdown=true; const wm=screenToWorld(e.clientX,e.clientY); mox=wm.x-mat.x; moy=wm.y-mat.y;
+    mat.el.style.zIndex=50;
+    mat.el.classList.add('dragging');
+  });
+  mat.el.addEventListener('touchstart',e=>{
+    if(e.target.closest('.mat-delete,.mat-resize')) return;
+    if(e.target.closest('.drum-block,.dpad-block,.disc-block')) return;
+    e.preventDefault();e.stopPropagation();
+    mdown=true;
+    const wmt=screenToWorld(e.touches[0].clientX,e.touches[0].clientY); mox=wmt.x-mat.x; moy=wmt.y-mat.y;
+    mat.el.style.zIndex=50; mat.el.classList.add('dragging');
+  },{passive:false});
+  document.addEventListener('mousemove',e=>{
+    if(!mdown) return;
+    const wp2=screenToWorld(e.clientX,e.clientY);
+    mat.x=Math.max(0,Math.min(wp2.x-mox, 3000-mat.w));
+    mat.y=Math.max(0,Math.min(wp2.y-moy, 3000-mat.h));
+    mat.el.style.left=mat.x+'px'; mat.el.style.top=mat.y+'px';
+    // Move mounted blocks with the mat
+    [...mat.mountedBlocks].forEach(bid=>{
+      const b=blockById(bid);
+      if(b&&b.matOffX!=null){
+        b.x=mat.x+b.matOffX; b.y=mat.y+b.matOffY;
+        b.el.style.left=b.x+'px'; b.el.style.top=b.y+'px';
+      }
+    });
+    renderConnectors(); renderProxLines();
+  });
+  document.addEventListener('touchmove',e=>{
+    if(!mdown) return; e.preventDefault();
+    const wp3=screenToWorld(e.touches[0].clientX,e.touches[0].clientY);
+    mat.x=Math.max(0,Math.min(wp3.x-mox, 3000-mat.w));
+    mat.y=Math.max(0,Math.min(wp3.y-moy, 3000-mat.h));
+    mat.el.style.left=mat.x+'px'; mat.el.style.top=mat.y+'px';
+    [...mat.mountedBlocks].forEach(bid=>{
+      const b=blockById(bid);
+      if(b&&b.matOffX!=null){
+        b.x=mat.x+b.matOffX; b.y=mat.y+b.matOffY;
+        b.el.style.left=b.x+'px'; b.el.style.top=b.y+'px';
+      }
+    });
+    renderConnectors(); renderProxLines();
+  },{passive:false});
+  document.addEventListener('mouseup',()=>{
+    if(mdown){mdown=false;mat.el.style.zIndex='';mat.el.classList.remove('dragging');}
+  });
+  document.addEventListener('touchend',()=>{
+    if(mdown){mdown=false;mat.el.style.zIndex='';mat.el.classList.remove('dragging');}
+  });
+}
+
+// ── Mat resize ──
+function setupMatResize(mat){
+  const handle=document.getElementById('mat-resize-'+mat.id);
+  if(!handle) return;
+  let rdown=false,rx0=0,ry0=0,rw0=0,rh0=0;
+  handle.addEventListener('mousedown',e=>{
+    e.preventDefault();e.stopPropagation();
+    rdown=true; rx0=e.clientX; ry0=e.clientY; rw0=mat.w; rh0=mat.h;
+  });
+  handle.addEventListener('touchstart',e=>{
+    e.preventDefault();e.stopPropagation();
+    rdown=true; rx0=e.touches[0].clientX; ry0=e.touches[0].clientY; rw0=mat.w; rh0=mat.h;
+  },{passive:false});
+  document.addEventListener('mousemove',e=>{
+    if(!rdown) return;
+    mat.w=Math.max(240,rw0+(e.clientX-rx0));
+    mat.h=Math.max(200,rh0+(e.clientY-ry0));
+    mat.el.style.width=mat.w+'px'; mat.el.style.height=mat.h+'px';
+    updateProximity(); renderProxLines();
+  });
+  document.addEventListener('touchmove',e=>{
+    if(!rdown) return; e.preventDefault();
+    mat.w=Math.max(240,rw0+(e.touches[0].clientX-rx0));
+    mat.h=Math.max(200,rh0+(e.touches[0].clientY-ry0));
+    mat.el.style.width=mat.w+'px'; mat.el.style.height=mat.h+'px';
+    updateProximity(); renderProxLines();
+  },{passive:false});
+  document.addEventListener('mouseup',()=>{rdown=false;});
+  document.addEventListener('touchend',()=>{rdown=false;});
+}
+
+// ── Check if a block was dropped onto a mat ──
+function checkBlockOnMat(block){
+  if(block.isDpad||block.isDisc) return; // special blocks don't mount
+  const bCx=block.x+BLOCK_W/2, bCy=block.y+BLOCK_H/2;
+  // Remove from any previous mat
+  if(block.matId!=null){
+    const oldMat=matById(block.matId);
+    if(oldMat) oldMat.mountedBlocks.delete(block.id);
+    block.matId=null; block.matOffX=null; block.matOffY=null;
+    block.el.classList.remove('on-mat');
+  }
+  // Check each mat
+  for(const mat of mats){
+    if(bCx>mat.x&&bCx<mat.x+mat.w&&bCy>mat.y&&bCy<mat.y+mat.h){
+      mat.mountedBlocks.add(block.id);
+      block.matId=mat.id;
+      block.matOffX=block.x-mat.x; block.matOffY=block.y-mat.y;
+      block.el.classList.add('on-mat');
+      block.el.style.zIndex=7;
+      updateProximity();
+      renderProxLines();
+      return;
+    }
+  }
+}
+
+// ── Proximity calculation ──
+// Average distance between all pairs of mounted blocks on same mat
+// Map distance → pitch shift: 0px apart = +12 semitones, maxDist apart = -12 semitones
+function updateProximity(){
+  mats.forEach(mat=>{
+    const ids=[...mat.mountedBlocks].filter(id=>blockById(id));
+    const freqEl=document.getElementById('mat-freq-'+mat.id);
+    if(ids.length<2){
+      proximityPitchShift=0;
+      if(freqEl){freqEl.textContent='';freqEl.classList.remove('active');}
+      return;
+    }
+    const bs=ids.map(id=>blockById(id));
+    // Compute average pairwise distance
+    let totalDist=0,pairs=0;
+    for(let i=0;i<bs.length;i++) for(let j=i+1;j<bs.length;j++){
+      const dx=(bs[i].x+BLOCK_W/2)-(bs[j].x+BLOCK_W/2);
+      const dy=(bs[i].y+BLOCK_H/2)-(bs[j].y+BLOCK_H/2);
+      totalDist+=Math.sqrt(dx*dx+dy*dy); pairs++;
+    }
+    const avgDist=totalDist/pairs;
+    // Max meaningful distance = mat diagonal
+    const maxDist=Math.sqrt(mat.w*mat.w+mat.h*mat.h);
+    const t=Math.min(1,avgDist/maxDist); // 0=close, 1=far
+    // Close=high pitch (+12st), Far=low pitch (-12st)
+    proximityPitchShift=12-(t*24);
+    const cents=Math.round(proximityPitchShift*100);
+    const semis=proximityPitchShift.toFixed(1);
+    if(freqEl){
+      freqEl.textContent=`${proximityPitchShift>=0?'+':''}${semis}st`;
+      freqEl.classList.toggle('active',Math.abs(proximityPitchShift)>0.5);
+    }
+  });
+  if(!mats.some(m=>m.mountedBlocks.size>=2)) proximityPitchShift=0;
+}
+
+// ── Draw proximity lines between mounted blocks ──
+let proxLineEls=[];
+function renderProxLines(){
+  proxLineEls.forEach(l=>l.remove());
+  proxLineEls=[];
+  mats.forEach(mat=>{
+    const ids=[...mat.mountedBlocks].filter(id=>blockById(id));
+    if(ids.length<2) return;
+    const bs=ids.map(id=>blockById(id));
+    for(let i=0;i<bs.length;i++) for(let j=i+1;j<bs.length;j++){
+      const a=bs[i],b=bs[j];
+      const ax=a.x+BLOCK_W/2, ay=a.y+BLOCK_H/2;
+      const bx=b.x+BLOCK_W/2, by=b.y+BLOCK_H/2;
+      const dx=bx-ax, dy=by-ay;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      const angle=Math.atan2(dy,dx)*180/Math.PI;
+      const maxDist=Math.sqrt(mat.w*mat.w+mat.h*mat.h);
+      const t=Math.min(1,dist/maxDist);
+      const line=document.createElement('div');
+      line.className='prox-line'+(t<0.3?' close':t>0.65?' far':'');
+      line.style.cssText=`left:${ax}px;top:${ay-1}px;width:${dist}px;transform:rotate(${angle}deg);opacity:${0.3+0.5*(1-t)};`;
+      canvas.appendChild(line);
+      proxLineEls.push(line);
+    }
+  });
+}
+
+/* ══════════════════════════════
+   TRAY DRAG
+══════════════════════════════ */
+let trayType=null,trayGhost=null;
+const trayColors={kick:'linear-gradient(145deg,#c0392b,#7b241c)',snare:'linear-gradient(145deg,#e67e22,#a04000)',hihat:'linear-gradient(145deg,#1abc9c,#0e6655)',bass:'linear-gradient(145deg,#2980b9,#154360)',dpad:'linear-gradient(145deg,#6c3483,#3b1a5e)',disc:'linear-gradient(145deg,#1c1c28,#1a1a2e)',mat:'linear-gradient(145deg,#c49455,#8a6030)'};
+const trayLetters={kick:'K',snare:'S',hihat:'H',bass:'B',dpad:'✛',disc:'💿',mat:'🟫'};
+function startTrayDrag(e,type){
+  e.preventDefault();e.stopPropagation();trayType=type;
+  trayGhost=document.createElement('div');
+  trayGhost.style.cssText=`position:fixed;width:52px;height:52px;border-radius:10px;pointer-events:none;z-index:9999;opacity:.8;display:flex;align-items:center;justify-content:center;font-family:'Fredoka One',cursive;font-size:24px;color:rgba(255,255,255,.92);box-shadow:0 6px 20px rgba(0,0,0,.3);`;
+  trayGhost.style.background=trayColors[type];trayGhost.textContent=trayLetters[type];
+  document.body.appendChild(trayGhost);
+  const _cx=e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:0);
+  const _cy=e.clientY!=null?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:0);
+  moveTrayGhost(_cx,_cy);
+}
+function moveTrayGhost(cx,cy){if(trayGhost){trayGhost.style.left=(cx-26)+'px';trayGhost.style.top=(cy-26)+'px';}}
+document.addEventListener('mousemove',e=>{if(trayType)moveTrayGhost(e.clientX,e.clientY);});
+document.addEventListener('touchmove',e=>{if(trayType)moveTrayGhost(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
+document.addEventListener('mouseup',e=>{if(trayType)dropTray(e.clientX,e.clientY);});
+document.addEventListener('touchend',e=>{if(trayType)dropTray(e.changedTouches[0].clientX,e.changedTouches[0].clientY);});
+function dropTray(cx,cy){
+  if(trayGhost){trayGhost.remove();trayGhost=null;}
+  const trayH=68;
+  if(cy>trayH&&cy<window.innerHeight){
+    const isDpad=trayType==='dpad',isDisc=trayType==='disc',isMat=trayType==='mat';
+    const bw=isDpad||isDisc?160:isMat?420:BLOCK_W,bh=isDpad||isDisc?140:isMat?320:BLOCK_H;
+    const wdrop=screenToWorld(cx,cy);
+    const x=Math.max(0,wdrop.x-bw/2),y=Math.max(0,wdrop.y-bh/2);
+    const b=isDpad?makeDpadBlock(x,y):isDisc?makeDiscBlock(x,y):isMat?makeMatBlock(x,y,420,320):makeBlock(trayType,x,y);
+    b.el.style.transform='scale(0.6)';b.el.style.opacity='0';
+    b.el.style.transition='transform .25s cubic-bezier(.17,.67,.35,1.4),opacity .2s';
+    requestAnimationFrame(()=>{b.el.style.transform='scale(1)';b.el.style.opacity='1';});
+    setTimeout(()=>b.el.style.transition='',280);
+    rebuildChains();
+    if(isPlaying)updatePlaybackMuting();
+  }
+  trayType=null;
+}
+
+/* ══════════════════════════════
+   KEYBOARD
+══════════════════════════════ */
+const keyMap={a:'kick',s:'snare',d:'hihat',f:'bass'};
+const held=new Set();
+document.addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(k==='arrowup'){e.preventDefault();const dp=blocks.filter(b=>b.isDpad&&isDpadConnected(b));if(dp.length)cycleInstrument(1);return;}
+  if(k==='arrowdown'){e.preventDefault();const dp=blocks.filter(b=>b.isDpad&&isDpadConnected(b));if(dp.length)cycleInstrument(-1);return;}
+  if(!keyMap[k]||held.has(k)) return;
+  held.add(k);
+  const match=blocks.filter(b=>b.type===keyMap[k]);
+  if(match.length)triggerBlock(match[match.length-1],false);
+});
+document.addEventListener('keyup',e=>held.delete(e.key.toLowerCase()));
+
+/* ══════════════════════════════
+   INIT
+══════════════════════════════ */
+window.addEventListener('load',()=>{
+  // Apply transform immediately so WebKit composites the layer
+  applyTransform();
+
+  // Use window dimensions (reliable on all Safari versions) to center blocks
+  // Account for tray height (68px)
+  function placeInitBlocks(){
+    const vw=window.innerWidth;
+    const vh=window.innerHeight-68;
+    // Place in screen center, convert to world coords (panX/Y=0, zoom=1 at start)
+    const cx=vw/2;
+    const cy=68+vh/2;
+    const w=screenToWorld(cx,cy);
+    makeBlock('kick',  w.x-206, w.y);
+    makeBlock('snare', w.x- 66, w.y);
+    makeBlock('hihat', w.x+ 74, w.y);
+    makeBlock('bass',  w.x+214, w.y);
+  }
+
+  // Small delay to let the DOM fully paint before reading dimensions
+  if(document.readyState==='complete'){
+    setTimeout(placeInitBlocks,100);
+  } else {
+    window.addEventListener('load',()=>setTimeout(placeInitBlocks,100),{once:true});
+    setTimeout(placeInitBlocks,300);
+  }
+});
+
+/* ══════════════════════════════
+   TOUCH: LONG-PRESS DELETE REVEAL
+══════════════════════════════ */
+(function(){
+  let lpTimer=null, lpEl=null;
+  function addLongPress(el){
+    el.addEventListener('touchstart',e=>{
+      if(e.target.closest('.delete-btn,.dp-btn,.joy-cap,.vinyl')) return;
+      lpEl=el;
+      lpTimer=setTimeout(()=>{
+        el.classList.add('touch-held');
+        // Auto-hide after 3s
+        setTimeout(()=>el.classList.remove('touch-held'),3000);
+      },500);
+    },{passive:true});
+    el.addEventListener('touchend',()=>{ clearTimeout(lpTimer); lpTimer=null; });
+    el.addEventListener('touchmove',()=>{ clearTimeout(lpTimer); lpTimer=null; });
+  }
+  // Patch makeBlock/makeDpadBlock/makeDiscBlock — observe DOM for new blocks
+  const obs=new MutationObserver(muts=>{
+    muts.forEach(m=>m.addedNodes.forEach(n=>{
+      if(n.classList&&(n.classList.contains('drum-block')||n.classList.contains('dpad-block')||n.classList.contains('disc-block'))){
+        addLongPress(n);
+      }
+    }));
+  });
+  document.addEventListener('DOMContentLoaded',()=>{
+    obs.observe(document.getElementById('world')||document.body,{childList:true,subtree:false});
+    // Patch existing blocks (in case they exist before observer starts)
+    document.querySelectorAll('.drum-block,.dpad-block,.disc-block').forEach(addLongPress);
+  });
+})();
+
+/* ══════════════════════════════
+   HELP MODAL
+══════════════════════════════ */
+function toggleHelp(){
+  const overlay=document.getElementById('help-overlay');
+  overlay.classList.toggle('open');
+}
+function closeHelp(e){
+  // Close if clicking directly on the overlay (not the modal itself)
+  if(e.target===document.getElementById('help-overlay')) toggleHelp();
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    const overlay=document.getElementById('help-overlay');
+    if(overlay.classList.contains('open')) overlay.classList.remove('open');
+  }
+});
+</script>
+</body>
+</html>
