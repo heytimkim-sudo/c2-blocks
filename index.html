@@ -1210,6 +1210,7 @@ function makeBlock(type,x,y){
   el.addEventListener('mousedown',onBlockMousedown);
   el.addEventListener('touchstart',onBlockTouchstart,{passive:false});
   el.addEventListener('contextmenu',e=>{e.preventDefault();deleteBlock(e,id);});
+  setupGuitarTouchStrum(el); // enable touch strum for guitar mode
   return block;
 }
 
@@ -1282,6 +1283,91 @@ function makeDiscBlock(x,y){
   el.addEventListener('contextmenu',e=>{e.preventDefault();deleteBlock(e,id);});
   setupJoystick(id);
   return block;
+}
+
+/* ── GUITAR STRUM via direct touch on block (no drag needed) ── */
+function setupGuitarTouchStrum(blockEl){
+  let strumActive=false;
+  let strumStartX=0,strumStartY=0;
+  let localHistory=[];
+  let localLastDir=0,localCooldown=0,localStringIdx=0,localChordFreqs=[],localDir=1;
+
+  function getBlock(){ return blockById(parseInt(blockEl.dataset.id)); }
+
+  blockEl.addEventListener('touchstart',e=>{
+    const b=getBlock();
+    if(!b||(b.currentInstrument||'drums')!=='guitar') return;
+    if(e.touches.length!==1) return;
+    e.stopPropagation(); // don't bubble to drag system
+    // DON'T e.preventDefault() here — let the drag system also see it
+    strumActive=true;
+    strumStartX=e.touches[0].clientX;
+    strumStartY=e.touches[0].clientY;
+    localHistory=[];localLastDir=0;localCooldown=0;
+    localStringIdx=0;localChordFreqs=[];localDir=1;
+  },{passive:true});
+
+  blockEl.addEventListener('touchmove',e=>{
+    const b=getBlock();
+    if(!strumActive||!b) return;
+    if((b.currentInstrument||'drums')!=='guitar') return;
+    e.preventDefault();
+
+    const now=performance.now();
+    const cx=e.touches[0].clientX, cy=e.touches[0].clientY;
+    localHistory.push({x:cx,y:cy,t:now});
+    localHistory=localHistory.filter(p=>now-p.t<120);
+    if(localHistory.length<2) return;
+
+    const oldest=localHistory[0];
+    const dx=cx-oldest.x, dy=cy-oldest.y;
+    const primaryDelta=Math.abs(dy)>Math.abs(dx)*0.5?dy:dx;
+    const dist=Math.sqrt(dx*dx+dy*dy);
+    const dt=Math.max(1,now-oldest.t);
+    const speed=dist/dt;
+
+    if(speed<0.2){localLastDir=0;return;}
+
+    const dir=primaryDelta>0?1:-1;
+    if(localLastDir!==0&&dir!==localLastDir){
+      localStringIdx=dir===1?0:5;
+      localDir=dir;
+    }
+    localLastDir=dir;
+
+    if(localChordFreqs.length===0||localDir!==dir){
+      localChordFreqs=STRUM_FREQS[b.type]||STRUM_FREQS.kick;
+      localDir=dir;
+      localStringIdx=dir===1?0:localChordFreqs.length-1;
+    }
+
+    const spacing=Math.max(16,90-speed*25);
+    if(now-localCooldown<spacing) return;
+    localCooldown=now;
+
+    const idx=Math.max(0,Math.min(localStringIdx,localChordFreqs.length-1));
+    const vol=Math.min(1.3,0.5+speed*0.6);
+    // Play the string
+    playNote('guitar',localChordFreqs[idx],vol);
+    waveHit();
+
+    // Visual strum ripple
+    const face=blockEl.querySelector('.face');
+    if(face){
+      const rip=document.createElement('div');rip.className='strum-ripple';
+      const pct=15+(idx/(localChordFreqs.length-1))*70;
+      rip.style.top=pct+'%';
+      face.appendChild(rip);
+      rip.addEventListener('animationend',()=>rip.remove(),{once:true});
+    }
+
+    localStringIdx+=dir;
+    if(localStringIdx<0||localStringIdx>=localChordFreqs.length){
+      localStringIdx=dir===1?localChordFreqs.length:-1;
+    }
+  },{passive:false});
+
+  blockEl.addEventListener('touchend',()=>{strumActive=false;localHistory=[];});
 }
 
 function setupJoystick(id){
@@ -1667,8 +1753,9 @@ function processStrum(cx, cy, now){
   const primaryDelta = Math.abs(dy) > Math.abs(dx)*0.5 ? dy : dx;
   const speed = Math.sqrt(dx*dx + dy*dy) / Math.max(1, now - oldest.t); // px/ms
 
-  // Need decent speed to trigger — prevents accidental picks
-  if(speed < 0.55) {
+  // Lower threshold for touch (events are less frequent than mouse)
+  const speedThreshold = window.matchMedia('(pointer:coarse)').matches ? 0.25 : 0.45;
+  if(speed < speedThreshold) {
     strumLastDir = 0;
     return;
   }
