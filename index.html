@@ -1650,7 +1650,10 @@ function strumPickString(freq, vol, isDownstroke){
 }
 
 function processStrum(cx, cy, now){
-  if(!dragging || dragging.isDpad || currentInstrument!=='guitar') return;
+  if(!dragging || dragging.isDpad || dragging.isDisc) return;
+  // Check this block's own instrument (set by its D-pad row)
+  const inst=dragging.currentInstrument||'drums';
+  if(inst!=='guitar') return;
 
   strumHistory.push({x:cx, y:cy, t:now});
   // Keep only last 80ms of history
