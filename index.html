@@ -2,11 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Drum Blocks</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;800&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{
+  -webkit-text-size-adjust:100%;
+  touch-action:manipulation;
+  -webkit-touch-callout:none;
+}
 body{
   width:100vw;height:100vh;overflow:hidden;
   overscroll-behavior:none;
@@ -1061,7 +1068,45 @@ const canvasEl=document.getElementById('canvas'); // the viewport
 const canvas=document.getElementById('world');          // the scrollable world
 function blockById(id){return blocks.find(b=>b.id===id)||null;}
 
-/* ── PAN / ZOOM STATE ── */
+/* ── BLOCK SAFARI BROWSER ZOOM ──
+   iOS Safari ignores user-scalable=no since iOS 10.
+   We must block gesture events and multi-touch zoom explicitly. */
+document.addEventListener('gesturestart',  e=>e.preventDefault(), {passive:false});
+document.addEventListener('gesturechange', e=>e.preventDefault(), {passive:false});
+document.addEventListener('gestureend',    e=>e.preventDefault(), {passive:false});
+// Block pinch-zoom at the document level (2+ finger touchmove with scale change)
+let _lastTouchDist=0;
+document.addEventListener('touchstart',e=>{
+  if(e.touches.length>=2){
+    _lastTouchDist=Math.hypot(
+      e.touches[0].clientX-e.touches[1].clientX,
+      e.touches[0].clientY-e.touches[1].clientY
+    );
+  }
+},{passive:true});
+document.addEventListener('touchmove',e=>{
+  if(e.touches.length>=2){
+    // If it looks like a pinch (distance changing significantly), block browser zoom
+    const dist=Math.hypot(
+      e.touches[0].clientX-e.touches[1].clientX,
+      e.touches[0].clientY-e.touches[1].clientY
+    );
+    // Only preventDefault if not handled by our canvas pinch handler
+    if(Math.abs(dist-_lastTouchDist)>2){
+      e.preventDefault();
+    }
+    _lastTouchDist=dist;
+  }
+},{passive:false});
+// Also block double-tap zoom on the whole document
+let _lastTap=0;
+document.addEventListener('touchend',e=>{
+  const now=Date.now();
+  if(now-_lastTap<300&&e.touches.length===0){
+    e.preventDefault();
+  }
+  _lastTap=now;
+},{passive:false});
 let panX=0, panY=0, zoom=1;
 const MIN_ZOOM=0.2, MAX_ZOOM=3;
 
